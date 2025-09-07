@@ -1,3 +1,26 @@
 modules = ["python-3.11"]
 [agent]
 expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Polish Trainer Bot"
+
+[[workflows.workflow]]
+name = "Polish Trainer Bot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python polish_trainer_bot.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
