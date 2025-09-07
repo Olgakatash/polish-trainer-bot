@@ -18,9 +18,12 @@ args = "Polish Trainer Bot"
 name = "Polish Trainer Bot"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python polish_trainer_bot.py"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python bot.py"
+
+[nix]
+channel = "stable-25_05"
