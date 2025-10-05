@@ -1,3 +1,32 @@
-мама;matka|mama;подсказка: на M;
-папа;ojciec|tata;;
-ребёнок;dziecko;;
+mama;мама
+matka;мать
+tata;папа
+ojciec;отец
+rodzice;родители
+syn;сын
+córka;дочь
+dziecko;ребёнок
+brat;брат
+siostra;сестра
+rodzeństwo;братья и сёстры
+dziadek;дедушка
+babcia;бабушка
+wnuk;внук
+wnuczka;внучка
+wnuki;внуки
+wujek;дядя
+ciocia;тётя
+stryj;дядя (брат отца)
+bratanek;племянник (сын брата)
+siostrzeniec;племянник (сын сестры)
+bratanica;племянница (дочь брата)
+siostrzenica;племянница (дочь сестры)
+kuzyn;двоюродный брат
+kuzynka;двоюродная сестра
+teść;свёкор / тесть
+teściowa;свекровь / тёща
+zięć;зять
+synowa;невестка
+mąż;муж
+żona;жена
+małżonkowie;супруги
