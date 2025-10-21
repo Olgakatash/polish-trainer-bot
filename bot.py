@@ -16,6 +16,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from dotenv import load_dotenv
+from aiohttp import web  # ← мини-вебсервер для Render
 
 # ── Настройки ──────────────────────────────────────────────────────────────────
 load_dotenv()
@@ -24,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN обязателен: добавь его в Replit → Secrets.")
+    raise ValueError(
+        "❌ BOT_TOKEN обязателен: добавь его в Replit/Render → Secrets.")
 
 
 # ── Состояния ─────────────────────────────────────────────────────────────────
@@ -119,7 +121,7 @@ class PolishTrainerBot:
             "phrases": "Zwroty",
             # маппинги для возможных CSV-имён:
             "rodzina": "Rodzina",
-            "semya": "Rodzina",  # если файл будет назван semya.csv
+            "semya": "Rodzina",
             "rutyna": "Rutyna",
         }
         self.category_icons: Dict[str, str] = {
@@ -152,7 +154,6 @@ class PolishTrainerBot:
                 cat_key = os.path.splitext(os.path.basename(path))[0].lower()
                 if cat_key not in self.categories:
                     self.categories[cat_key] = []
-                # красивое имя категории
                 if cat_key not in self.category_names_pl:
                     self.category_names_pl[cat_key] = cat_key.capitalize()
 
@@ -206,7 +207,6 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_category_keyboard() -> InlineKeyboardMarkup:
-    # Сначала — известные базовые в фиксированном порядке
     order = [
         "greetings", "rodzina", "semya", "numbers", "colors", "food",
         "phrases", "rutyna"
@@ -222,7 +222,6 @@ def get_category_keyboard() -> InlineKeyboardMarkup:
                                      callback_data=f"cat_{key}")
             ])
             added.add(key)
-    # Затем — все остальные CSV-категории (если есть), по алфавиту
     for key in sorted(trainer.categories.keys()):
         if key not in added:
             icon = trainer.category_icons.get(key, "📁")
@@ -240,12 +239,12 @@ def get_category_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-# ── Обработчики команд/кнопок ────────────────────────────────────────────────
+# ── Обработчики ───────────────────────────────────────────────────────────────
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     txt = ("🇵🇱 Witaj w Polish Trainer Bot! 🇵🇱\n\n"
            "Ucz się słownictwa, rozwiązuj quizy i śledź postępy.\n"
-           "Учи слова, проходи викторины и отслеживай прогресс.\n\n"
+           "Учи слова, проходи викторины i отслеживай прогресс.\n\n"
            "Wybierz opcję / Выбери действие:")
     await message.answer(txt,
                          reply_markup=get_main_keyboard(),
@@ -443,9 +442,12 @@ async def finish_quiz(msg: Message, uid: int):
     del trainer.quiz_sessions[uid]
 
     text = f"🎉 Wynik: {score}/{total} ({percent:.1f}%)"
-    if percent >= 80: text += "\n🌟 Świetnie!"
-    elif percent >= 60: text += "\n👍 Dobrze!"
-    else: text += "\n📚 Ćwicz dalej!"
+    if percent >= 80:
+        text += "\n🌟 Świetnie!"
+    elif percent >= 60:
+        text += "\n👍 Dobrze!"
+    else:
+        text += "\n📚 Ćwicz dalej!"
     await msg.answer(text, reply_markup=get_main_keyboard())
 
 
@@ -483,12 +485,33 @@ async def progress(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── Регистрация и запуск ──────────────────────────────────────────────────────
+# ── Регистрация роутера ───────────────────────────────────────────────────────
 dp.include_router(router)
 
 
+# ── Мини веб-сервер для Render (healthcheck) ──────────────────────────────────
+async def healthcheck(request):
+    return web.Response(text="OK")
+
+
+async def start_web_server():
+    app = web.Application()
+    app.add_routes(
+        [web.get('/', healthcheck),
+         web.get('/health', healthcheck)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 10000))  # Render задаёт PORT
+    site = web.TCPSite(runner, host="0.0.0.0", port=port)
+    await site.start()
+    logger.info(f"🌐 Web server started on port {port}")
+
+
+# ── Запуск ─────────────────────────────────────────────────────────────────────
 async def main():
     logger.info("🚀 Uruchamianie Polish Trainer Bot...")
+    # Запускаем веб-сервер в фоне, чтобы Render видел «живой» порт
+    asyncio.create_task(start_web_server())
     await dp.start_polling(bot)
 
 
