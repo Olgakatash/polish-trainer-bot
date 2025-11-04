@@ -198,6 +198,16 @@ NAMES_PL = {
     "dania": "Dania",
     "rodzina": "Rodzina",
     "rutyna": "Rutyna",
+    "jedzenie_owoce": "Owoce 🍎",
+    "jedzenie_warzywa": "Warzywa 🥕",
+    "jedzenie_mieso": "Mięso 🍖",
+    "jedzenie_ryby": "Ryby 🐟",
+    "jedzenie_nabial": "Nabiał 🧈",
+    "jedzenie_pieczywo": "Pieczywo 🥖",
+    "jedzenie_napoje": "Napoje ☕",
+    "jedzenie_slodycze": "Słodycze 🍰",
+    "jedzenie_przyprawy": "Przyprawy 🧂",
+
     # "meble": "Meble",
     # "pomieszczenia":"Pomieszczenia",
 }
