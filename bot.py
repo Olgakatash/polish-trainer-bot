@@ -45,13 +45,13 @@ class PolishTrainerBot:
             "dzień dobry": "добрый день",
             "dobry wieczór": "добрый вечер",
             "cześć": "привет/пока",
+            "pa": "пока",
+            "na razie": "пока",
             "do widzenia": "до свидания",
             "dziękuję": "спасибо",
             "proszę": "пожалуйста",
             "tak": "да",
             "nie": "нет",
-            "pa": "пока",
-            "na razie": "пока",
 
             # Kolory
             "czerwony": "красный",
