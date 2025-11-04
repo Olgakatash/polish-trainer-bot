@@ -16,7 +16,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from dotenv import load_dotenv
-from aiohttp import web  # ← мини-вебсервер для Render
+
+# для healthcheck на Render
+from aiohttp import web
 
 # ── Настройки ──────────────────────────────────────────────────────────────────
 load_dotenv()
@@ -25,8 +27,7 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError(
-        "❌ BOT_TOKEN обязателен: добавь его в Replit/Render → Secrets.")
+    raise ValueError("❌ BOT_TOKEN обязателен: добавь его в Secrets/Env.")
 
 
 # ── Состояния ─────────────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ class PolishTrainerBot:
             "biały": "белый",
             "różowy": "розовый",
             "fioletowy": "фиолетовый",
-            # Jedzenie
+            # Jedzenie (минимум)
             "chleb": "хлеб",
             "mleko": "молоко",
             "woda": "вода",
@@ -87,76 +88,47 @@ class PolishTrainerBot:
             "gdzie jest toaleta?": "где туалет?",
         }
 
-        # Базовые категории (ключ → список польских слов)
+        # Категории (ключи — польские, как в твоём интерфейсе)
         self.categories: Dict[str, List[str]] = {
-            "greetings": [
+            "powitania": [
                 "dzień dobry", "dobry wieczór", "cześć", "do widzenia",
                 "dziękuję", "proszę", "tak", "nie"
             ],
-            "numbers": [
+            "liczby": [
                 "jeden", "dwa", "trzy", "cztery", "pięć", "sześć", "siedem",
                 "osiem", "dziewięć", "dziesięć"
             ],
-            "colors": [
+            "kolory": [
                 "czerwony", "niebieski", "zielony", "żółty", "czarny", "biały",
                 "różowy", "fioletowy"
             ],
-            "food": [
+            "jedzenie": [
                 "chleb", "mleko", "woda", "mięso", "ryba", "jabłko", "banan",
                 "ser"
             ],
-            "phrases": [
+            "zwroty": [
                 "jak się masz?", "miło mi cię poznać", "nie rozumiem",
                 "mówisz po angielsku?", "ile to kosztuje?",
                 "gdzie jest toaleta?"
             ],
+            # из CSV будут добавляться: "rodzina", "rutyna", и т.п.
         }
-
-        # Красивые названия и эмодзи для известных категорий
-        self.category_names_pl: Dict[str, str] = {
-            "greetings": "Powitania",
-            "numbers": "Liczby",
-            "colors": "Kolory",
-            "food": "Jedzenie",
-            "phrases": "Zwroty",
-            # маппинги для возможных CSV-имён:
-            "rodzina": "Rodzina",
-            "semya": "Rodzina",
-            "rutyna": "Rutyna",
-        }
-        self.category_icons: Dict[str, str] = {
-            "greetings": "👋",
-            "numbers": "🔢",
-            "colors": "🎨",
-            "food": "🍞",
-            "phrases": "💬",
-            "rodzina": "👨‍👩‍👧‍👦",
-            "semya": "👨‍👩‍👧‍👦",
-            "rutyna": "🕒",
-        }
-
-        # Сессии/статистика
-        self.user_scores: Dict[int, Dict] = {}
-        self.quiz_sessions: Dict[int, Dict] = {}
 
         # Подтягиваем все CSV из data/
         self.load_csv_vocabulary()
+
+        # Статистика/сессии
+        self.user_scores: Dict[int, Dict] = {}
+        self.quiz_sessions: Dict[int, Dict] = {}
 
     def load_csv_vocabulary(self):
         """Подгружаем все CSV из папки data/ и расширяем словарь/категории."""
         try:
             files = glob.glob("data/*.csv")
-            if not files:
-                logger.info(
-                    "ℹ️ CSV-файлов в data/ не найдено — работаем с базовыми категориями."
-                )
             for path in files:
                 cat_key = os.path.splitext(os.path.basename(path))[0].lower()
                 if cat_key not in self.categories:
                     self.categories[cat_key] = []
-                if cat_key not in self.category_names_pl:
-                    self.category_names_pl[cat_key] = cat_key.capitalize()
-
                 with open(path, "r", encoding="utf-8") as f:
                     reader = csv.reader(f, delimiter=";")
                     for row in reader:
@@ -166,9 +138,8 @@ class PolishTrainerBot:
                             if pl and ru:
                                 self.vocabulary[pl] = ru
                                 self.categories[cat_key].append(pl)
-
             logger.info(
-                f"✅ Категорий всего: {len(self.categories)}; слов всего: {len(self.vocabulary)}"
+                f"✅ Категорий: {len(self.categories)}; слов: {len(self.vocabulary)}"
             )
         except Exception as e:
             logger.error(f"Ошибка при загрузке CSV: {e}")
@@ -195,56 +166,99 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 router = Router()
 
+# ── Группы и красивые названия ────────────────────────────────────────────────
+GROUPS = {
+    # показываем только существующие категории (фильтруем при показе)
+    "podstawy": ["powitania", "kolory", "liczby", "zwroty"],
+    "jedzenie": ["jedzenie", "produkty", "napoje", "dania"],
+    "rodzina": ["rodzina"],
+    "rutyna": ["rutyna"],
+    # "dom":    ["meble", "pomieszczenia"],
+}
+
+NAMES_PL = {
+    # группы
+    "podstawy": "Podstawy",
+    "jedzenie": "Jedzenie",
+    "rodzina": "Rodzina",
+    "rutyna": "Rutyna",
+    # "dom":   "Dom",
+
+    # категории
+    "powitania": "Powitania",
+    "kolory": "Kolory",
+    "liczby": "Liczby",
+    "zwroty": "Zwroty",
+    "jedzenie": "Jedzenie",
+    "produkty": "Produkty",
+    "napoje": "Napoje",
+    "dania": "Dania",
+    "rodzina": "Rodzina",
+    "rutyna": "Rutyna",
+    # "meble": "Meble",
+    # "pomieszczenia":"Pomieszczenia",
+}
+
 
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
 def get_main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Ucz się słówek", callback_data="study")],
-        [InlineKeyboardButton(text="🎯 Quiz", callback_data="quiz")],
+        [
+            InlineKeyboardButton(text="📖 Ucz się słówek",
+                                 callback_data="nav_learn")
+        ],
+        [
+            InlineKeyboardButton(text="🎯 Tryb treningowy",
+                                 callback_data="nav_train")
+        ],
+        [
+            InlineKeyboardButton(text="🔎 Przeglądaj",
+                                 callback_data="nav_browse")
+        ],
         [InlineKeyboardButton(text="🎲 Losowe słowo", callback_data="random")],
         [InlineKeyboardButton(text="📊 Postępy", callback_data="progress")],
     ])
 
 
-def get_category_keyboard() -> InlineKeyboardMarkup:
-    order = [
-        "greetings", "rodzina", "semya", "numbers", "colors", "food",
-        "phrases", "rutyna"
-    ]
-    added = set()
+def get_groups_keyboard() -> InlineKeyboardMarkup:
     rows = []
-    for key in order:
-        if key in trainer.categories and key not in added:
-            icon = trainer.category_icons.get(key, "📁")
-            name = trainer.category_names_pl.get(key, key.capitalize())
-            rows.append([
-                InlineKeyboardButton(text=f"{icon} {name}",
-                                     callback_data=f"cat_{key}")
-            ])
-            added.add(key)
-    for key in sorted(trainer.categories.keys()):
-        if key not in added:
-            icon = trainer.category_icons.get(key, "📁")
-            name = trainer.category_names_pl.get(key, key.capitalize())
-            rows.append([
-                InlineKeyboardButton(text=f"{icon} {name}",
-                                     callback_data=f"cat_{key}")
-            ])
-
-    rows.append([
-        InlineKeyboardButton(text="📚 Wszystkie słowa", callback_data="cat_all")
-    ])
+    for gkey, cats in GROUPS.items():
+        existing = [c for c in cats if c in trainer.categories]
+        if not existing:
+            continue
+        icon = "👋" if gkey == "podstawy" else "🍽️" if gkey == "jedzenie" else "👨‍👩‍👧‍👦" if gkey == "rodzina" else "🕒" if gkey == "rutyna" else "📁"
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{icon} {NAMES_PL.get(gkey, gkey.capitalize())}",
+                callback_data=f"learn_group:{gkey}")
+        ])
     rows.append(
         [InlineKeyboardButton(text="🔙 Wróć", callback_data="back_to_menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-# ── Обработчики ───────────────────────────────────────────────────────────────
+def get_group_categories_keyboard(group_key: str) -> InlineKeyboardMarkup:
+    rows = []
+    for ckey in GROUPS.get(group_key, []):
+        if ckey in trainer.categories:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
+                    callback_data=
+                    f"cat_{ckey}"  # используем существующий просмотр категории
+                )
+            ])
+    rows.append(
+        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_learn")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# ── Старт и меню ──────────────────────────────────────────────────────────────
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     txt = ("🇵🇱 Witaj w Polish Trainer Bot! 🇵🇱\n\n"
            "Ucz się słownictwa, rozwiązuj quizy i śledź postępy.\n"
-           "Учи слова, проходи викторины i отслеживай прогресс.\n\n"
+           "Учи слова, проходи викторины и отслеживай прогресс.\n\n"
            "Wybierz opcję / Выбери действие:")
     await message.answer(txt,
                          reply_markup=get_main_keyboard(),
@@ -253,19 +267,58 @@ async def cmd_start(message: Message):
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(cb: CallbackQuery):
-    await cb.message.answer("🏠 Menu główne\n\nWybierz opcję:",
-                            reply_markup=get_main_keyboard())
+    await cb.message.edit_text("🏠 Menu główne\n\nWybierz opcję:",
+                               reply_markup=get_main_keyboard())
     await cb.answer()
 
 
-@router.callback_query(F.data == "study")
-async def study(cb: CallbackQuery):
-    await cb.message.answer("📖 <b>Ucz się słówek</b>\n\nWybierz kategorię:",
-                            reply_markup=get_category_keyboard(),
-                            parse_mode="HTML")
+# ── Новая навигация: «Ucz się słówek» (Группы → Категории) ───────────────────
+@router.callback_query(F.data == "nav_learn")
+async def nav_learn(cb: CallbackQuery):
+    await cb.message.edit_text("📖 <b>Ucz się słówek</b>\n\nWybierz grupę:",
+                               reply_markup=get_groups_keyboard(),
+                               parse_mode="HTML")
     await cb.answer()
 
 
+@router.callback_query(F.data.startswith("learn_group:"))
+async def nav_learn_group(cb: CallbackQuery):
+    group_key = cb.data.split(":", 1)[1]
+    title = NAMES_PL.get(group_key, group_key.capitalize())
+    await cb.message.edit_text(
+        f"📚 <b>{title}</b>\n\nWybierz kategorię:",
+        reply_markup=get_group_categories_keyboard(group_key),
+        parse_mode="HTML")
+    await cb.answer()
+
+
+@router.callback_query(F.data == "nav_train")
+async def nav_train(cb: CallbackQuery):
+    # временно оставляем твой текущий вход в квиз
+    await cb.answer()
+    await quiz_entry(cb)  # вызов функции ниже (выбор направления)
+
+
+@router.callback_query(F.data == "nav_browse")
+async def nav_browse(cb: CallbackQuery):
+    await cb.message.edit_text(
+        "🔎 <b>Przeglądaj</b>\n\nWybierz grupę w „📖 Ucz się słówek”.\n"
+        "Na kolejny krok dodamy wygodną paginację.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📖 Ucz się słówek",
+                                     callback_data="nav_learn")
+            ],
+            [
+                InlineKeyboardButton(text="🔙 Wróć",
+                                     callback_data="back_to_menu")
+            ],
+        ]),
+        parse_mode="HTML")
+    await cb.answer()
+
+
+# ── Просмотр категорий (твоя логика cat_*) ───────────────────────────────────
 @router.callback_query(F.data.startswith("cat_"))
 async def show_category(cb: CallbackQuery):
     key = cb.data.replace("cat_", "")
@@ -276,11 +329,11 @@ async def show_category(cb: CallbackQuery):
         lst = trainer.categories.get(key, [])
         pairs = [(w, trainer.vocabulary[w]) for w in lst
                  if w in trainer.vocabulary]
-        cat_name = trainer.category_names_pl.get(key, key.capitalize())
+        cat_name = NAMES_PL.get(key, key.capitalize())
 
     if not pairs:
-        await cb.message.answer("❌ W tej kategorii na razie nie ma słów.",
-                                reply_markup=get_category_keyboard())
+        await cb.message.edit_text("❌ W tej kategorii na razie nie ma słów.",
+                                   reply_markup=get_main_keyboard())
         await cb.answer()
         return
 
@@ -289,20 +342,17 @@ async def show_category(cb: CallbackQuery):
         text += f"🇵🇱 <code>{pl}</code> → {ru}\n"
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🔙 Wróć do kategorii",
-                                 callback_data="study")
-        ],
+        [InlineKeyboardButton(text="📖 Grupy", callback_data="nav_learn")],
         [
             InlineKeyboardButton(text="🏠 Menu główne",
                                  callback_data="back_to_menu")
         ],
     ])
-    await cb.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await cb.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await cb.answer()
 
 
-# ── ВИКТОРИНА ─────────────────────────────────────────────────────────────────
+# ── ВИКТОРИНА (оставляем твою текущую механику) ───────────────────────────────
 @router.callback_query(F.data == "quiz")
 async def quiz_entry(cb: CallbackQuery):
     await cb.answer()
@@ -311,7 +361,7 @@ async def quiz_entry(cb: CallbackQuery):
         [InlineKeyboardButton(text="🇷🇺 → 🇵🇱", callback_data="quiz_ru_pl")],
         [InlineKeyboardButton(text="🔙 Wróć", callback_data="back_to_menu")],
     ])
-    await cb.message.answer(
+    await cb.message.edit_text(
         "Wybierz tryb quizu:\n\n"
         "🇵🇱 → 🇷🇺 Polskie słowo → tłumaczenie na rosyjski\n"
         "🇷🇺 → 🇵🇱 Rosyjskie słowo → tłumaczenie na polski",
@@ -411,7 +461,6 @@ async def skip_q(cb: CallbackQuery, state: FSMContext):
         await cb.message.answer("❌ Brak sesji quizu. Wciśnij «🎯 Quiz».")
         await state.clear()
         return
-
     sess["current_question"] += 1
     if sess["current_question"] >= sess["total"]:
         await finish_quiz(cb.message, uid)
@@ -442,12 +491,9 @@ async def finish_quiz(msg: Message, uid: int):
     del trainer.quiz_sessions[uid]
 
     text = f"🎉 Wynik: {score}/{total} ({percent:.1f}%)"
-    if percent >= 80:
-        text += "\n🌟 Świetnie!"
-    elif percent >= 60:
-        text += "\n👍 Dobrze!"
-    else:
-        text += "\n📚 Ćwicz dalej!"
+    if percent >= 80: text += "\n🌟 Świetnie!"
+    elif percent >= 60: text += "\n👍 Dobrze!"
+    else: text += "\n📚 Ćwicz dalej!"
     await msg.answer(text, reply_markup=get_main_keyboard())
 
 
@@ -462,8 +508,8 @@ async def random_word(cb: CallbackQuery):
                                  callback_data="back_to_menu")
         ],
     ])
-    await cb.message.answer(f"🎲 Losowe słowo:\n\n🇵🇱 {pl} → {ru}",
-                            reply_markup=kb)
+    await cb.message.edit_text(f"🎲 Losowe słowo:\n\n🇵🇱 {pl} → {ru}",
+                               reply_markup=kb)
     await cb.answer()
 
 
@@ -481,7 +527,7 @@ async def progress(cb: CallbackQuery):
                 f"Quizów: {s['quiz_count']}")
     else:
         text = "📊 Brak statystyk. Zrób quiz!"
-    await cb.message.answer(text, reply_markup=get_main_keyboard())
+    await cb.message.edit_text(text, reply_markup=get_main_keyboard())
     await cb.answer()
 
 
@@ -489,29 +535,28 @@ async def progress(cb: CallbackQuery):
 dp.include_router(router)
 
 
-# ── Мини веб-сервер для Render (healthcheck) ──────────────────────────────────
+# ── Healthcheck веб-сервер для Render ─────────────────────────────────────────
 async def healthcheck(request):
-    return web.Response(text="OK")
+    return web.Response(text="ok")
 
 
 async def start_web_server():
     app = web.Application()
     app.add_routes(
-        [web.get('/', healthcheck),
-         web.get('/health', healthcheck)])
+        [web.get("/", healthcheck),
+         web.get("/health", healthcheck)])
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.getenv("PORT", 10000))  # Render задаёт PORT
+    port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, host="0.0.0.0", port=port)
     await site.start()
     logger.info(f"🌐 Web server started on port {port}")
 
 
-# ── Запуск ─────────────────────────────────────────────────────────────────────
+# ── Запуск ────────────────────────────────────────────────────────────────────
 async def main():
     logger.info("🚀 Uruchamianie Polish Trainer Bot...")
-    # Запускаем веб-сервер в фоне, чтобы Render видел «живой» порт
-    asyncio.create_task(start_web_server())
+    asyncio.create_task(start_web_server())  # healthcheck для Render/cron
     await dp.start_polling(bot)
 
 
