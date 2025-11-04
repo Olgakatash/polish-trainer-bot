@@ -41,19 +41,29 @@ class PolishTrainerBot:
     def __init__(self):
         # Базовая лексика (pl → ru), чтобы были стартовые категории
         self.vocabulary: Dict[str, str] = {
-            # Powitania
+            # Powitania (приветствия/прощания)
             "dzień dobry": "добрый день",
             "dobry wieczór": "добрый вечер",
-            "cześć": "привет",
-            "cześć": "пока",
-            "pa": "пока",
-            "na razie": "пока",
+            "cześć": "привет/пока",
             "do widzenia": "до свидания",
             "dziękuję": "спасибо",
             "proszę": "пожалуйста",
             "tak": "да",
             "nie": "нет",
-            # Liczby
+            "pa": "пока",
+            "na razie": "пока",
+
+            # Kolory
+            "czerwony": "красный",
+            "niebieski": "синий",
+            "zielony": "зелёный",
+            "żółty": "жёлтый",
+            "czarny": "чёрный",
+            "biały": "белый",
+            "różowy": "розовый",
+            "fioletowy": "фиолетовый",
+
+            # Liczby 0–10
             "jeden": "один",
             "dwa": "два",
             "trzy": "три",
@@ -64,24 +74,40 @@ class PolishTrainerBot:
             "osiem": "восемь",
             "dziewięć": "девять",
             "dziesięć": "десять",
-            # Kolory
-            "czerwony": "красный",
-            "niebieski": "синий",
-            "zielony": "зелёный",
-            "żółty": "жёлтый",
-            "czarny": "чёрный",
-            "biały": "белый",
-            "różowy": "розовый",
-            "fioletowy": "фиолетовый",
-            # Jedzenie (минимум)
-            "chleb": "хлеб",
-            "mleko": "молоко",
-            "woda": "вода",
-            "mięso": "мясо",
-            "ryba": "рыба",
-            "jabłko": "яблоко",
-            "banan": "банан",
-            "ser": "сыр",
+
+            # Liczby 10–20
+            "jedenaście": "одиннадцать",
+            "dwanaście": "двенадцать",
+            "trzynaście": "тринадцать",
+            "czternaście": "четырнадцать",
+            "piętnaście": "пятнадцать",
+            "szesnaście": "шестнадцать",
+            "siedemnaście": "семнадцать",
+            "osiemnaście": "восемнадцать",
+            "dziewiętnaście": "девятнадцать",
+            "dwadzieścia": "двадцать",
+
+            # Liczby 20–100 (десятки)
+            "trzydzieści": "тридцать",
+            "czterdzieści": "сорок",
+            "pięćdziesiąt": "пятьдесят",
+            "sześćdziesiąt": "шестьдесят",
+            "siedemdziesiąt": "семьдесят",
+            "osiemdziesiąt": "восемьдесят",
+            "dziewięćdziesiąt": "девяносто",
+
+            # Liczby 100–1000
+            "sto": "сто",
+            "dwieście": "двести",
+            "trzysta": "триста",
+            "czterysta": "четыреста",
+            "pięćset": "пятьсот",
+            "sześćset": "шестьсот",
+            "siedemset": "семьсот",
+            "osiemset": "восемьсот",
+            "dziewięćset": "девятьсот",
+            "tysiąc": "тысяча",
+
             # Zwroty
             "jak się masz?": "как дела?",
             "miło mi cię poznać": "приятно познакомиться",
@@ -91,30 +117,43 @@ class PolishTrainerBot:
             "gdzie jest toaleta?": "где туалет?",
         }
 
-        # Категории (ключи — польские, как в твоём интерфейсе)
+        # Категории (ключи — польские, как в интерфейсе)
         self.categories: Dict[str, List[str]] = {
+            # Podstawy → powitania, kolory, liczby*, zwroty
             "powitania": [
                 "dzień dobry", "dobry wieczór", "cześć", "do widzenia",
-                "dziękuję", "proszę", "tak", "nie"
-            ],
-            "liczby": [
-                "jeden", "dwa", "trzy", "cztery", "pięć", "sześć", "siedem",
-                "osiem", "dziewięć", "dziesięć"
+                "dziękuję", "proszę", "tak", "nie", "pa", "na razie"
             ],
             "kolory": [
                 "czerwony", "niebieski", "zielony", "żółty", "czarny", "biały",
                 "różowy", "fioletowy"
             ],
-            "jedzenie": [
-                "chleb", "mleko", "woda", "mięso", "ryba", "jabłko", "banan",
-                "ser"
+            "liczby_0_10": [
+                "jeden", "dwa", "trzy", "cztery", "pięć", "sześć", "siedem",
+                "osiem", "dziewięć", "dziesięć"
+            ],
+            "liczby_10_20": [
+                "jedenaście", "dwanaście", "trzynaście", "czternaście",
+                "piętnaście", "szesnaście", "siedemnaście", "osiemnaście",
+                "dziewiętnaście", "dwadzieścia"
+            ],
+            "liczby_20_100": [
+                "trzydzieści", "czterdzieści", "pięćdziesiąt", "sześćdziesiąt",
+                "siedemdziesiąt", "osiemdziesiąt", "dziewięćdziesiąt"
+            ],
+            "liczby_100_1000": [
+                "sto", "dwieście", "trzysta", "czterysta", "pięćset",
+                "sześćset", "siedemset", "osiemset", "dziewięćset", "tysiąc"
             ],
             "zwroty": [
                 "jak się masz?", "miło mi cię poznać", "nie rozumiem",
-                "mówisz po angielsku?", "ile to kosztuje?",
+                "мówisz po angielsku?", "ile to kosztuje?",
                 "gdzie jest toaleta?"
             ],
-            # из CSV будут добавляться: "rodzina", "rutyna", и т.п.
+
+            # Остальные подтянутся из CSV:
+            # "rodzina", "semya", "rutyna", "mieszkanie", "czas_wolny",
+            # jedzenie_owoce, jedzenie_warzywa, itd.
         }
 
         # Подтягиваем все CSV из data/
@@ -169,48 +208,75 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 router = Router()
 
-# ── Группы и красивые названия ────────────────────────────────────────────────
+# ── Группы и названия ─────────────────────────────────────────────────────────
 GROUPS = {
-    # показываем только существующие категории (фильтруем при показе)
-    "podstawy": ["powitania", "kolory", "liczby", "zwroty"],
-    "jedzenie": ["jedzenie", "produkty", "napoje", "dania"],
-    "rodzina": ["rodzina"],
+    # Показываем только существующие категории (фильтрация — ниже)
+    "podstawy": [
+        "powitania", "kolory", "liczby_0_10", "liczby_10_20", "liczby_20_100",
+        "liczby_100_1000", "zwroty"
+    ],
+    "jedzenie": [
+        # сюда автоматически попадут CSV: jedzenie_owoce, jedzenie_warzywa, itd.
+        # если ты их создала — добавь ключи, чтобы показать в меню:
+        "jedzenie_owoce",
+        "jedzenie_warzywa",
+        "jedzenie_mieso",
+        "jedzenie_ryby",
+        "jedzenie_nabial",
+        "jedzenie_pieczywo",
+        "jedzenie_napoje",
+        "jedzenie_slodycze",
+        "jedzenie_przyprawy"
+    ],
     "rutyna": ["rutyna"],
-    # "dom":    ["meble", "pomieszczenia"],
+    "rodzina": ["rodzina", "semya"],
+    "czas_wolny": ["czas_wolny"],
+    "mieszkanie": ["mieszkanie"],
 }
 
 NAMES_PL = {
     # группы
-    "podstawy": "Podstawy",
-    "jedzenie": "Jedzenie",
-    "rodzina": "Rodzina",
-    "rutyna": "Rutyna",
-    # "dom":   "Dom",
+    "podstawy": "Podstawy",  # 👋
+    "jedzenie": "Jedzenie",  # 🍽️
+    "rutyna": "Rutyna",  # 🕒
+    "rodzina": "Rodzina",  # 👨‍👩‍👧‍👦
+    "czas_wolny": "Czas wolny",  # 🎯
+    "mieszkanie": "Mieszkanie",  # 🏠
 
     # категории
     "powitania": "Powitania",
     "kolory": "Kolory",
-    "liczby": "Liczby",
     "zwroty": "Zwroty",
-    "jedzenie": "Jedzenie",
-    "produkty": "Produkty",
-    "napoje": "Napoje",
-    "dania": "Dania",
-    "rodzina": "Rodzina",
+    "liczby_0_10": "Liczby 0–10",
+    "liczby_10_20": "Liczby 10–20",
+    "liczby_20_100": "Liczby 20–100",
+    "liczby_100_1000": "Liczby 100–1000",
+    "jedzenie_owoce": "Owoce",
+    "jedzenie_warzywa": "Warzywa",
+    "jedzenie_mieso": "Mięso",
+    "jedzenie_ryby": "Ryby",
+    "jedzenie_nabial": "Nabiał",
+    "jedzenie_pieczywo": "Pieczywo",
+    "jedzenie_napoje": "Napoje",
+    "jedzenie_slodycze": "Słodycze",
+    "jedzenie_przyprawy": "Przyprawy",
     "rutyna": "Rutyna",
-    "jedzenie_owoce": "Owoce 🍎",
-    "jedzenie_warzywa": "Warzywa 🥕",
-    "jedzenie_mieso": "Mięso 🍖",
-    "jedzenie_ryby": "Ryby 🐟",
-    "jedzenie_nabial": "Nabiał 🧈",
-    "jedzenie_pieczywo": "Pieczywo 🥖",
-    "jedzenie_napoje": "Napoje ☕",
-    "jedzenie_slodycze": "Słodycze 🍰",
-    "jedzenie_przyprawy": "Przyprawy 🧂",
-
-    # "meble": "Meble",
-    # "pomieszczenia":"Pomieszczenia",
+    "rodzina": "Rodzina",
+    "semya": "Rodzina",
+    "czas_wolny": "Czas wolny",
+    "mieszkanie": "Mieszkanie",
 }
+
+
+def icon_for_group(gkey: str) -> str:
+    return {
+        "podstawy": "👋",
+        "jedzenie": "🍽️",
+        "rodzina": "👨‍👩‍👧‍👦",
+        "rutyna": "🕒",
+        "czas_wolny": "🎯",
+        "mieszkanie": "🏠"
+    }.get(gkey, "📁")
 
 
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
@@ -236,13 +302,17 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
 def get_groups_keyboard() -> InlineKeyboardMarkup:
     rows = []
     for gkey, cats in GROUPS.items():
-        existing = [c for c in cats if c in trainer.categories]
+        # показываем группу только если в ней есть хотя бы одна реальная категория
+        existing = [
+            c for c in cats
+            if c in trainer.categories and trainer.categories[c]
+        ]
         if not existing:
             continue
-        icon = "👋" if gkey == "podstawy" else "🍽️" if gkey == "jedzenie" else "👨‍👩‍👧‍👦" if gkey == "rodzina" else "🕒" if gkey == "rutyna" else "📁"
         rows.append([
             InlineKeyboardButton(
-                text=f"{icon} {NAMES_PL.get(gkey, gkey.capitalize())}",
+                text=
+                f"{icon_for_group(gkey)} {NAMES_PL.get(gkey, gkey.capitalize())}",
                 callback_data=f"learn_group:{gkey}")
         ])
     rows.append(
@@ -253,13 +323,11 @@ def get_groups_keyboard() -> InlineKeyboardMarkup:
 def get_group_categories_keyboard(group_key: str) -> InlineKeyboardMarkup:
     rows = []
     for ckey in GROUPS.get(group_key, []):
-        if ckey in trainer.categories:
+        if ckey in trainer.categories and trainer.categories[ckey]:
             rows.append([
                 InlineKeyboardButton(
                     text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
-                    callback_data=
-                    f"cat_{ckey}"  # используем существующий просмотр категории
-                )
+                    callback_data=f"cat_{ckey}")
             ])
     rows.append(
         [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_learn")])
@@ -307,16 +375,16 @@ async def nav_learn_group(cb: CallbackQuery):
 
 @router.callback_query(F.data == "nav_train")
 async def nav_train(cb: CallbackQuery):
-    # временно оставляем твой текущий вход в квиз
+    # пока используем текущий вход в квиз
     await cb.answer()
-    await quiz_entry(cb)  # вызов функции ниже (выбор направления)
+    await quiz_entry(cb)
 
 
 @router.callback_query(F.data == "nav_browse")
 async def nav_browse(cb: CallbackQuery):
     await cb.message.edit_text(
         "🔎 <b>Przeglądaj</b>\n\nWybierz grupę w „📖 Ucz się słówek”.\n"
-        "Na kolejny krok dodamy wygodną paginację.",
+        "W następnym kroku dodamy paginację.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text="📖 Ucz się słówek",
@@ -331,7 +399,7 @@ async def nav_browse(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── Просмотр категорий (твоя логика cat_*) ───────────────────────────────────
+# ── Просмотр категорий ───────────────────────────────────────────────────────
 @router.callback_query(F.data.startswith("cat_"))
 async def show_category(cb: CallbackQuery):
     key = cb.data.replace("cat_", "")
@@ -365,7 +433,7 @@ async def show_category(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── ВИКТОРИНА (оставляем твою текущую механику) ───────────────────────────────
+# ── ВИКТОРИНА (как раньше) ───────────────────────────────────────────────────
 @router.callback_query(F.data == "quiz")
 async def quiz_entry(cb: CallbackQuery):
     await cb.answer()
@@ -550,7 +618,7 @@ dp.include_router(router)
 
 # ── Healthcheck веб-сервер для Render ─────────────────────────────────────────
 async def healthcheck(request):
-    return web.Response(text="ok")
+    return web.Response(text="OK")
 
 
 async def start_web_server():
