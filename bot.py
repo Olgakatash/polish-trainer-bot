@@ -17,11 +17,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from dotenv import load_dotenv
+from aiohttp import web  # healthcheck
 
-# для healthcheck на Render
-from aiohttp import web
-
-# ── Настройки ──────────────────────────────────────────────────────────────────
+# ── Настройки ─────────────────────────────────────────────────────────────────
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,11 +28,10 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN обязателен: добавь его в Secrets/Env.")
 
-# Параметры UI
-PAGE_SIZE = 12  # пагинация в просмотре
+PAGE_SIZE = 12  # для пагинации в просмотре
 
 
-# ── Вспомогательные (диакритики/числа/сортировка) ────────────────────────────
+# ── Утилиты (диакритики/числа/пагинация) ─────────────────────────────────────
 def _strip_accents(s: str) -> str:
     s = (s or "").strip().lower()
     return "".join(c for c in unicodedata.normalize("NFD", s)
@@ -70,9 +67,9 @@ _NUM_WORD = {
     "szesnascie": 16,
     "szesnaście": 16,
     "siedemnascie": 17,
-    "siedemnaście": 17,
+    "siedемnaście": 17,
     "osiemnascie": 18,
-    "osiemnaście": 18,
+    "osiемnaście": 18,
     "dziewietnascie": 19,
     "dziewiętnaście": 19,
     "dwadziescia": 20,
@@ -86,7 +83,7 @@ _NUM_WORD = {
     "szescdziesiat": 60,
     "sześćdziesiąt": 60,
     "siedemdziesiat": 70,
-    "siedemdziesiąt": 70,
+    "siedемdziesiąt": 70,
     "osiemdziesiat": 80,
     "osiемdziesiąt": 80,
     "dziewiecdziesiat": 90,
@@ -103,7 +100,7 @@ _NUM_WORD = {
     "siedemset": 700,
     "osiemset": 800,
     "dziewiecset": 900,
-    "dziewięćset": 900,
+    "dziewięćсет": 900,
     "tysiac": 1000,
     "tysiąc": 1000,
 }
@@ -111,22 +108,15 @@ _NUM_WORD = {
 
 def _word_to_number_pl(s: str):
     t = _strip_accents(s)
-    if t in _NUM_WORD:
-        return _NUM_WORD[t]
-    parts = [p for p in t.split() if p]
-    if not parts:
-        return None
+    if t in _NUM_WORD: return _NUM_WORD[t]
     total = 0
-    for p in parts:
-        if p in _NUM_WORD:
-            total += _NUM_WORD[p]
-        else:
-            return None
-    return total if total else None
+    for p in t.split():
+        if p in _NUM_WORD: total += _NUM_WORD[p]
+        else: return None
+    return total or None
 
 
 def valid_answers_pl(expected_pl: str) -> List[str]:
-    """Допустимые польские ответы: слово (с/без диакритик) + цифры (если числит.)."""
     answers = {expected_pl}
     nodiac = _strip_accents(expected_pl)
     if nodiac != expected_pl.lower():
@@ -143,24 +133,23 @@ def equals_relaxed(user_text: str, valid: List[str]) -> bool:
 
 
 def paginate(items: List, page: int, page_size: int = PAGE_SIZE):
-    total_pages = max(1, (len(items) + page_size - 1) // page_size)
-    page = page % total_pages
+    total = max(1, (len(items) + page_size - 1) // page_size)
+    page = page % total
     start = page * page_size
-    return items[start:start + page_size], page, total_pages
+    return items[start:start + page_size], page, total
 
 
-# ── Состояния ─────────────────────────────────────────────────────────────────
+# ── FSM ───────────────────────────────────────────────────────────────────────
 class QuizStates(StatesGroup):
     waiting_for_answer = State()
 
 
-# ── Модель ────────────────────────────────────────────────────────────────────
+# ── Модель данных ─────────────────────────────────────────────────────────────
 class PolishTrainerBot:
 
     def __init__(self):
-        # базовая лексика
         self.vocabulary: Dict[str, str] = {
-            # powitania
+            # Powitania
             "dzień dobry": "добрый день",
             "dobry wieczór": "добрый вечер",
             "cześć": "привет/пока",
@@ -171,7 +160,7 @@ class PolishTrainerBot:
             "proszę": "пожалуйста",
             "tak": "да",
             "nie": "нет",
-            # kolory
+            # Kolory
             "czerwony": "красный",
             "niebieski": "синий",
             "zielony": "зелёный",
@@ -180,7 +169,7 @@ class PolishTrainerBot:
             "biały": "белый",
             "różowy": "розовый",
             "fioletowy": "фиолетовый",
-            # liczby 0–10
+            # Liczby
             "jeden": "один",
             "dwa": "два",
             "trzy": "три",
@@ -191,7 +180,6 @@ class PolishTrainerBot:
             "osiem": "восемь",
             "dziewięć": "девять",
             "dziesięć": "десять",
-            # 10–20
             "jedenaście": "одиннадцать",
             "dwanaście": "двенадцать",
             "trzynaście": "тринадцать",
@@ -202,26 +190,24 @@ class PolishTrainerBot:
             "osiemnaście": "восемнадцать",
             "dziewiętnaście": "девятнадцать",
             "dwadzieścia": "двадцать",
-            # десятки
             "trzydzieści": "тридцать",
             "czterdzieści": "сорок",
             "pięćdziesiąt": "пятьдесят",
             "sześćdziesiąt": "шестьдесят",
-            "siedemdziesiąt": "семьдесят",
+            "siedемdziesiąt": "семьдесят",
             "osiемdziesiąt": "восемьдесят",
             "dziewięćdziesiąt": "девяносто",
-            # 100–1000
             "sto": "сто",
             "dwieście": "двести",
             "trzysta": "триста",
             "czterysta": "четыреста",
             "pięćset": "пятьсот",
             "sześćset": "шестьсот",
-            "siedemset": "семьсот",
+            "siedемset": "семьсот",
             "osiemset": "восемьсот",
-            "dziewięćset": "девятьсот",
+            "dziewięćсет": "девятьсот",
             "tysiąc": "тысяча",
-            # zwroty
+            # Zwroty
             "jak się masz?": "как дела?",
             "miło mi cię poznać": "приятно познакомиться",
             "nie rozumiem": "я не понимаю",
@@ -229,8 +215,6 @@ class PolishTrainerBot:
             "ile to kosztuje?": "сколько это стоит?",
             "gdzie jest toaleta?": "где туалет?",
         }
-
-        # категории
         self.categories: Dict[str, List[str]] = {
             "powitania": [
                 "dzień dobry", "dobry wieczór", "cześć", "do widzenia",
@@ -246,16 +230,16 @@ class PolishTrainerBot:
             ],
             "liczby_10_20": [
                 "jedenaście", "dwanaście", "trzynaście", "czternaście",
-                "piętnaście", "szesnaście", "siedemnaście", "osiemnaście",
+                "piętnaście", "szesnaście", "siedемnaście", "osiемnaście",
                 "dziewiętnaście", "dwadzieścia"
             ],
             "liczby_20_100": [
                 "trzydzieści", "czterdzieści", "pięćdziesiąt", "sześćdziesiąt",
-                "siedemdziesiąt", "osiемdziesiąt", "dziewięćdziesiąt"
+                "siedемdziesiąt", "osiемdziesiąт", "dziewięćdziesiąт"
             ],
             "liczby_100_1000": [
                 "sto", "dwieście", "trzysta", "czterysta", "pięćсет",
-                "sześćset", "siedemset", "osiemset", "dziewięćсет", "tysiąc"
+                "sześćset", "siedемset", "osiемset", "dziewięćсет", "tysiąc"
             ],
             "zwroty": [
                 "jak się masz?", "miło mi cię poznać", "nie rozumiem",
@@ -263,26 +247,21 @@ class PolishTrainerBot:
                 "gdzie jest toaleta?"
             ],
         }
-
         self.load_csv_vocabulary()
-
-        # статистика и сессии
         self.user_scores: Dict[int, Dict] = {}
         self.quiz_sessions: Dict[int, Dict] = {}
 
     def load_csv_vocabulary(self):
         try:
-            files = glob.glob("data/*.csv")
-            for path in files:
+            for path in glob.glob("data/*.csv"):
                 cat_key = os.path.splitext(os.path.basename(path))[0].lower()
-                if cat_key not in self.categories:
-                    self.categories[cat_key] = []
+                self.categories.setdefault(cat_key, [])
                 with open(path, "r", encoding="utf-8") as f:
                     reader = csv.reader(f, delimiter=";")
                     for row in reader:
                         if len(row) >= 2:
-                            pl = (row[0] or "").strip()
-                            ru = (row[1] or "").strip()
+                            pl, ru = (row[0] or "").strip(), (row[1]
+                                                              or "").strip()
                             if pl and ru:
                                 self.vocabulary[pl] = ru
                                 self.categories[cat_key].append(pl)
@@ -310,19 +289,18 @@ class PolishTrainerBot:
     def flat_items(self,
                    pool_keys: List[str] | None = None
                    ) -> List[Tuple[str, str]]:
-        items = []
+        items: List[Tuple[str, str]] = []
         if pool_keys:
             for ck in pool_keys:
                 for w in self.categories.get(ck, []):
                     if w in self.vocabulary:
                         items.append((w, self.vocabulary[w]))
         else:
-            for w, ru in self.vocabulary.items():
-                items.append((w, ru))
+            items = list(self.vocabulary.items())
         return items
 
 
-# ── Инициализация aiogram ────────────────────────────────────────────────────
+# ── Инициализация бота ────────────────────────────────────────────────────────
 trainer = PolishTrainerBot()
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -333,8 +311,7 @@ GROUPS = {
     "podstawy": [
         "powitania", "kolory", "liczby_0_10", "liczby_10_20", "liczby_20_100",
         "liczby_100_1000", "zwroty"
-    ],
-    # можно вернуть прочие группы позже
+    ]
 }
 NAMES_PL = {
     "podstawy": "Podstawy",
@@ -384,7 +361,7 @@ def get_groups_keyboard() -> InlineKeyboardMarkup:
         rows.append([
             InlineKeyboardButton(
                 text=
-                f"{icon_for_group(gkey)} {NAMES_PL.get(gkey, gkey.capitalize())}",
+                f"{icon_for_group(gkey)} {NAMES_PL.get(gkey,gkey.capitalize())}",
                 callback_data=f"learn_group:{gkey}")
         ])
     rows.append(
@@ -392,24 +369,43 @@ def get_groups_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_group_categories_keyboard(group_key: str) -> InlineKeyboardMarkup:
+def get_group_categories_keyboard(group_key: str,
+                                  train_mode: bool = False
+                                  ) -> InlineKeyboardMarkup:
     rows = []
     for ckey in GROUPS.get(group_key, []):
         if ckey in trainer.categories and trainer.categories[ckey]:
+            cb = (f"train_pick_cat:{ckey}" if train_mode else f"cat_{ckey}")
             rows.append([
                 InlineKeyboardButton(
                     text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
-                    callback_data=f"cat_{ckey}")
+                    callback_data=cb)
             ])
-    rows.append(
-        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_learn")])
+    rows.append([
+        InlineKeyboardButton(
+            text="🔙 Wróć",
+            callback_data=("nav_train" if train_mode else "nav_learn"))
+    ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def kb_pagination(group_key: str, ckey: str, page: int, total: int):
+def kb_pagination(group_key: str, ckey: str, page: int, total: int,
+                  cats_in_group: List[str]):
     prev_p = (page - 1) % total
     next_p = (page + 1) % total
+    i = cats_in_group.index(ckey)
+    prev_c = cats_in_group[i - 1] if i > 0 else cats_in_group[-1]
+    next_c = cats_in_group[
+        i + 1] if i < len(cats_in_group) - 1 else cats_in_group[0]
     return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="◀️", callback_data=f"browse_cat:{group_key}:{prev_c}:0"),
+            InlineKeyboardButton(text=f"{NAMES_PL.get(ckey, ckey)}",
+                                 callback_data="noop"),
+            InlineKeyboardButton(
+                text="▶️", callback_data=f"browse_cat:{group_key}:{next_c}:0")
+        ],
         [
             InlineKeyboardButton(
                 text="⏮",
@@ -418,7 +414,7 @@ def kb_pagination(group_key: str, ckey: str, page: int, total: int):
                                  callback_data="noop"),
             InlineKeyboardButton(
                 text="⏭",
-                callback_data=f"browse_cat:{group_key}:{ckey}:{next_p}"),
+                callback_data=f"browse_cat:{group_key}:{ckey}:{next_p}")
         ],
         [
             InlineKeyboardButton(text="🔙 Wróć",
@@ -427,7 +423,7 @@ def kb_pagination(group_key: str, ckey: str, page: int, total: int):
     ])
 
 
-# ── Старт/меню ────────────────────────────────────────────────────────────────
+# ── Старт и меню ──────────────────────────────────────────────────────────────
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     txt = ("🇵🇱 Witaj w Polish Trainer Bot! 🇵🇱\n\n"
@@ -446,7 +442,7 @@ async def back_to_menu(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── Learn ─────────────────────────────────────────────────────────────────────
+# ── Learn: группы → категории → список ────────────────────────────────────────
 @router.callback_query(F.data == "nav_learn")
 async def nav_learn(cb: CallbackQuery):
     await cb.message.edit_text("📖 <b>Ucz się słówek</b>\n\nWybierz grupę:",
@@ -458,39 +454,9 @@ async def nav_learn(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("learn_group:"))
 async def nav_learn_group(cb: CallbackQuery):
     group_key = cb.data.split(":", 1)[1]
-    title = NAMES_PL.get(group_key, group_key.capitalize())
     await cb.message.edit_text(
-        f"📚 <b>{title}</b>\n\nWybierz kategorię:",
+        f"📚 <b>{NAMES_PL.get(group_key, group_key.capitalize())}</b>\n\nWybierz kategorię:",
         reply_markup=get_group_categories_keyboard(group_key),
-        parse_mode="HTML")
-    await cb.answer()
-
-
-# ── Browse ────────────────────────────────────────────────────────────────────
-@router.callback_query(F.data == "nav_browse")
-async def nav_browse(cb: CallbackQuery):
-    kb = []
-    for g in GROUPS.keys():
-        kb.append([
-            InlineKeyboardButton(
-                text=f"{icon_for_group(g)} {NAMES_PL.get(g,g)}",
-                callback_data=f"browse_group:{g}")
-        ])
-    kb.append(
-        [InlineKeyboardButton(text="🔙 Wróć", callback_data="back_to_menu")])
-    await cb.message.edit_text(
-        "🔎 <b>Przeglądaj</b>\n\nWybierz групę:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
-        parse_mode="HTML")
-    await cb.answer()
-
-
-@router.callback_query(F.data.startswith("browse_group:"))
-async def browse_group(cb: CallbackQuery):
-    g = cb.data.split(":", 1)[1]
-    await cb.message.edit_text(
-        f"🔎 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
-        reply_markup=get_group_categories_keyboard(g),
         parse_mode="HTML")
     await cb.answer()
 
@@ -501,15 +467,14 @@ async def show_category(cb: CallbackQuery):
     lst = trainer.categories.get(key, [])
     pairs = [(w, trainer.vocabulary[w]) for w in lst
              if w in trainer.vocabulary]
-    cat_name = NAMES_PL.get(key, key.capitalize())
+    name = NAMES_PL.get(key, key.capitalize())
 
     if not pairs:
         await cb.message.edit_text("❌ W tej kategorii na razie nie ma słów.",
                                    reply_markup=get_main_keyboard())
-        await cb.answer()
-        return
+        return await cb.answer()
 
-    lines = [f"📚 <b>{cat_name}</b>\n"]
+    lines = [f"📚 <b>{name}</b>\n"]
     for pl, ru in pairs:
         lines.append(f"🇵🇱 <code>{pl}</code> → {ru}")
 
@@ -526,6 +491,35 @@ async def show_category(cb: CallbackQuery):
     await cb.answer()
 
 
+# ── Browse: группы → категории → стрелки и пагинация ─────────────────────────
+@router.callback_query(F.data == "nav_browse")
+async def nav_browse(cb: CallbackQuery):
+    kb = []
+    for g in GROUPS.keys():
+        kb.append([
+            InlineKeyboardButton(
+                text=f"{icon_for_group(g)} {NAMES_PL.get(g,g)}",
+                callback_data=f"browse_group:{g}")
+        ])
+    kb.append(
+        [InlineKeyboardButton(text="🔙 Wróć", callback_data="back_to_menu")])
+    await cb.message.edit_text(
+        "🔎 <b>Przeglądaj</b>\n\nWybierz grupę:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
+        parse_mode="HTML")
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("browse_group:"))
+async def browse_group(cb: CallbackQuery):
+    g = cb.data.split(":", 1)[1]
+    await cb.message.edit_text(
+        f"🔎 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
+        reply_markup=get_group_categories_keyboard(g),
+        parse_mode="HTML")
+    await cb.answer()
+
+
 @router.callback_query(F.data.startswith("browse_cat:"))
 async def browse_cat(cb: CallbackQuery):
     _, group_key, ckey, page_s = cb.data.split(":")
@@ -538,22 +532,26 @@ async def browse_cat(cb: CallbackQuery):
             "❌ Pusto.", reply_markup=get_group_categories_keyboard(group_key))
         return await cb.answer()
 
-    chunk, page, total_pages = paginate(items, page, PAGE_SIZE)
-
+    chunk, page, total = paginate(items, page, PAGE_SIZE)
     lines = [f"📃 <b>{NAMES_PL.get(ckey, ckey)}</b> — razem {len(items)}"]
     for pl, ru in chunk:
-        extra_digits = [x for x in valid_answers_pl(pl) if x.isdigit()]
-        tail = f" • dop.: {', '.join(extra_digits)}" if extra_digits else ""
+        digits = [x for x in valid_answers_pl(pl) if x.isdigit()]
+        tail = f" • dop.: {', '.join(digits)}" if digits else ""
         lines.append(f"• <b>{pl}</b> — {ru}{tail}")
 
+    cats_in_group = [
+        c for c in GROUPS.get(group_key, [])
+        if c in trainer.categories and trainer.categories[c]
+    ]
     await cb.message.edit_text("\n".join(lines),
                                reply_markup=kb_pagination(
-                                   group_key, ckey, page, total_pages),
+                                   group_key, ckey, page, total,
+                                   cats_in_group),
                                parse_mode="HTML")
     await cb.answer()
 
 
-# ── Квиз ──────────────────────────────────────────────────────────────────────
+# ── Тренировка ────────────────────────────────────────────────────────────────
 @router.callback_query(F.data == "nav_train")
 async def nav_train(cb: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -574,7 +572,7 @@ async def nav_train(cb: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("train_scope:"))
-async def choose_train_scope(cb: CallbackQuery, state: FSMContext):
+async def train_scope(cb: CallbackQuery, state: FSMContext):
     scope = cb.data.split(":", 1)[1]
     if scope == "all":
         await state.update_data(train_cats=None)
@@ -585,22 +583,15 @@ async def choose_train_scope(cb: CallbackQuery, state: FSMContext):
         ])
         await cb.message.edit_text("Wybierz kierunek quizu:", reply_markup=kb)
     else:
-        # выберем категорию из istnieщих
-        await cb.message.edit_text(
-            "🎯 Wybierz kategorię (Podstawy):",
-            reply_markup=get_group_categories_keyboard("podstawy"),
-            parse_mode="HTML")
+        await cb.message.edit_text("🎯 Wybierz kategorię:",
+                                   reply_markup=get_group_categories_keyboard(
+                                       "podstawy", train_mode=True),
+                                   parse_mode="HTML")
     await cb.answer()
 
 
-@router.callback_query(F.data.startswith("browse_group:"))
-async def _noop(cb: CallbackQuery):
-    # уже обработано выше
-    await cb.answer()
-
-
-@router.callback_query(F.data.startswith("train_cat:"))
-async def train_cat(cb: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.startswith("train_pick_cat:"))
+async def train_pick_cat(cb: CallbackQuery, state: FSMContext):
     ckey = cb.data.split(":", 1)[1]
     await state.update_data(train_cats=[ckey])
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -617,13 +608,11 @@ async def train_cat(cb: CallbackQuery, state: FSMContext):
 async def quiz_start(cb: CallbackQuery, state: FSMContext):
     uid = cb.from_user.id
     direction = "pl_ru" if cb.data == "quiz_pl_ru" else "ru_pl"
-
     data = await state.get_data()
     pool_keys = data.get("train_cats")
     words = trainer.flat_items(pool_keys)
     if not words:
-        words = trainer.flat_items()
-
+        return await cb.message.answer("❌ Brak słów w wybranym zakresie.")
     random.shuffle(words)
     words = words[:10]  # длина квиза по умолчанию
 
@@ -640,20 +629,17 @@ async def quiz_start(cb: CallbackQuery, state: FSMContext):
 
 async def ask_question(msg: Message, uid: int, state: FSMContext):
     sess = trainer.quiz_sessions.get(uid)
-    if not sess:
-        return
+    if not sess: return
     i = sess["current_question"]
     if i >= sess["total"]:
-        await finish_quiz(msg, uid)
-        return
+        return await finish_quiz(msg, uid)
 
     pl, ru = sess["words"][i]
     if sess["direction"] == "pl_ru":
-        # принимаем перевод на RU + цифры, если это числительное
-        question = f"Co znaczy po rosyjsku: «{pl}»?"
+        q = f"Co znaczy po rosyjsku: «{pl}»?"
         valid = [ru] + [x for x in valid_answers_pl(pl) if x.isdigit()]
     else:
-        question = f"Jak będzie po polsku: «{ru}»?"
+        q = f"Jak będzie po polsku: «{ru}»?"
         valid = valid_answers_pl(pl)
 
     await state.update_data(correct_answer_list=valid, user_id=uid)
@@ -663,8 +649,8 @@ async def ask_question(msg: Message, uid: int, state: FSMContext):
         [InlineKeyboardButton(text="⏭️ Pomiń", callback_data="skip_question")],
         [InlineKeyboardButton(text="❌ Zakończ", callback_data="end_quiz")],
     ])
-    progress = f"{i+1}/{sess['total']}"
-    await msg.answer(f"🎯 Pytanie {progress}\n\n{question}", reply_markup=kb)
+    await msg.answer(f"🎯 Pytanie {i+1}/{sess['total']}\n\n{q}",
+                     reply_markup=kb)
 
 
 @router.message(QuizStates.waiting_for_answer)
@@ -673,26 +659,21 @@ async def on_answer(message: Message, state: FSMContext):
     uid = data.get("user_id")
     sess = trainer.quiz_sessions.get(uid)
     if not sess:
-        await message.answer("❌ Brak sesji quizu. Wciśnij «🎯 Tryb treningowy»."
-                             )
-        await state.clear()
-        return
+        await message.answer("❌ Brak sesji quizu.")
+        return await state.clear()
 
-    user_text = (message.text or "").strip()
+    user = (message.text or "").strip()
     valid: List[str] = data.get("correct_answer_list", [])
-    ok = equals_relaxed(user_text, valid)
-
+    ok = equals_relaxed(user, valid)
     if ok:
         sess["score"] += 1
-        reply = "✅ Dobrze!"
+        await message.answer("✅ Dobrze!")
     else:
         hint = ", ".join(sorted(set(valid), key=_strip_accents))
-        reply = f"❌ Źle.\nPodpowiedź: <b>{hint}</b>"
+        await message.answer(f"❌ Źle.\nPodpowiedź: <b>{hint}</b>",
+                             parse_mode="HTML")
 
-    trainer.update_user_score(uid, ok)
     sess["current_question"] += 1
-    await message.answer(reply, parse_mode="HTML")
-
     if sess["current_question"] >= sess["total"]:
         await finish_quiz(message, uid)
         await state.clear()
@@ -708,8 +689,7 @@ async def skip_q(cb: CallbackQuery, state: FSMContext):
     sess = trainer.quiz_sessions.get(uid)
     if not sess:
         await cb.message.answer("❌ Brak sesji quizu.")
-        await state.clear()
-        return
+        return await state.clear()
     sess["current_question"] += 1
     if sess["current_question"] >= sess["total"]:
         await finish_quiz(cb.message, uid)
@@ -723,8 +703,7 @@ async def end_q(cb: CallbackQuery, state: FSMContext):
     await cb.answer("❌ Zakończono")
     data = await state.get_data()
     uid = data.get("user_id")
-    if uid in trainer.quiz_sessions:
-        del trainer.quiz_sessions[uid]
+    if uid in trainer.quiz_sessions: del trainer.quiz_sessions[uid]
     await state.clear()
     await cb.message.answer("❌ Quiz zakończony.",
                             reply_markup=get_main_keyboard())
@@ -732,10 +711,9 @@ async def end_q(cb: CallbackQuery, state: FSMContext):
 
 async def finish_quiz(msg: Message, uid: int):
     sess = trainer.quiz_sessions.get(uid)
-    if not sess:
-        return
+    if not sess: return
     score, total = sess["score"], sess["total"]
-    percent = score / total * 100 if total else 0.0
+    percent = (score / total * 100) if total else 0.0
     trainer.get_user_stats(uid)["quiz_count"] += 1
     del trainer.quiz_sessions[uid]
 
@@ -762,18 +740,17 @@ async def random_word(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── Прогресс ───────────────────────────────────────────────────────────────────
+# ── Прогресс ──────────────────────────────────────────────────────────────────
 @router.callback_query(F.data == "progress")
 async def progress(cb: CallbackQuery):
     uid = cb.from_user.id
     s = trainer.get_user_stats(uid)
-    if s["total_questions"] > 0:
+    if s["total_questions"]:
         acc = s["correct_answers"] / s["total_questions"] * 100
-        text = (f"📊 Twoje postępy:\n\n"
-                f"Pytania: {s['total_questions']}\n"
-                f"Poprawnych: {s['correct_answers']}\n"
-                f"Skuteczność: {acc:.1f}%\n"
-                f"Quizów: {s['quiz_count']}")
+        text = (
+            f"📊 Twoje postępy:\n\nPytania: {s['total_questions']}\n"
+            f"Poprawnych: {s['correct_answers']}\nSkuteczność: {acc:.1f}%\n"
+            f"Quizów: {s['quiz_count']}")
     else:
         text = "📊 Brak statystyk. Zrób quiz!"
     await cb.message.edit_text(text, reply_markup=get_main_keyboard())
@@ -784,8 +761,8 @@ async def progress(cb: CallbackQuery):
 dp.include_router(router)
 
 
-# ── Healthcheck веб-сервер для Render ─────────────────────────────────────────
-async def healthcheck(request):
+# ── Healthcheck для Render ────────────────────────────────────────────────────
+async def healthcheck(_):
     return web.Response(text="OK")
 
 
@@ -805,9 +782,7 @@ async def start_web_server():
 # ── Запуск ────────────────────────────────────────────────────────────────────
 async def main():
     logger.info("🚀 Uruchamianie Polish Trainer Bot...")
-    # Web Service на Render должен слушать порт → поднимем healthcheck
     asyncio.create_task(start_web_server())
-    # На всякий случай выключим webhook, чтобы не конфликтовал с getUpdates
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
