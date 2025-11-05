@@ -593,12 +593,6 @@ async def choose_train_scope(cb: CallbackQuery, state: FSMContext):
     await cb.answer()
 
 
-@router.callback_query(F.data.startswith("cat_"))
-async def pick_cat_for_train(cb: CallbackQuery, state: FSMContext):
-    # этот хэндлер уже существует (show_category). Чтобы не конфликтовать, оставим выбор через browse:
-    await cb.answer()
-
-
 @router.callback_query(F.data.startswith("browse_group:"))
 async def _noop(cb: CallbackQuery):
     # уже обработано выше
