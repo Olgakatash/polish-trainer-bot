@@ -28,16 +28,17 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN обязателен: добавь его в Secrets/Env.")
 
-PAGE_SIZE = 12  # для пагинации в просмотре
+PAGE_SIZE = 12  # для пагинации в «Przeglądaj»
 
 
-# ── Утилиты (диакритики/числа/пагинация) ─────────────────────────────────────
+# ── Утилиты ──────────────────────────────────────────────────────────────────
 def _strip_accents(s: str) -> str:
     s = (s or "").strip().lower()
     return "".join(c for c in unicodedata.normalize("NFD", s)
                    if unicodedata.category(c) != "Mn")
 
 
+# числительные → цифры (для принятия «50» как верного ответа к «pięćdziesiąt»)
 _NUM_WORD = {
     "zero": 0,
     "jeden": 1,
@@ -67,9 +68,9 @@ _NUM_WORD = {
     "szesnascie": 16,
     "szesnaście": 16,
     "siedemnascie": 17,
-    "siedемnaście": 17,
+    "siedemnaście": 17,
     "osiemnascie": 18,
-    "osiемnaście": 18,
+    "osiemnaście": 18,
     "dziewietnascie": 19,
     "dziewiętnaście": 19,
     "dwadziescia": 20,
@@ -83,9 +84,9 @@ _NUM_WORD = {
     "szescdziesiat": 60,
     "sześćdziesiąt": 60,
     "siedemdziesiat": 70,
-    "siedемdziesiąt": 70,
+    "siedemdziesiąt": 70,
     "osiemdziesiat": 80,
-    "osiемdziesiąt": 80,
+    "osiemdziesiąt": 80,
     "dziewiecdziesiat": 90,
     "dziewięćdziesiąt": 90,
     "sto": 100,
@@ -100,7 +101,7 @@ _NUM_WORD = {
     "siedemset": 700,
     "osiemset": 800,
     "dziewiecset": 900,
-    "dziewięćсет": 900,
+    "dziewięćset": 900,
     "tysiac": 1000,
     "tysiąc": 1000,
 }
@@ -148,6 +149,7 @@ class QuizStates(StatesGroup):
 class PolishTrainerBot:
 
     def __init__(self):
+        # базовые слова
         self.vocabulary: Dict[str, str] = {
             # Powitania
             "dzień dobry": "добрый день",
@@ -194,8 +196,8 @@ class PolishTrainerBot:
             "czterdzieści": "сорок",
             "pięćdziesiąt": "пятьдесят",
             "sześćdziesiąt": "шестьдесят",
-            "siedемdziesiąt": "семьдесят",
-            "osiемdziesiąt": "восемьдесят",
+            "siedemdziesiąt": "семьдесят",
+            "osiemdziesiąt": "восемьдесят",
             "dziewięćdziesiąt": "девяносто",
             "sto": "сто",
             "dwieście": "двести",
@@ -203,9 +205,9 @@ class PolishTrainerBot:
             "czterysta": "четыреста",
             "pięćset": "пятьсот",
             "sześćset": "шестьсот",
-            "siedемset": "семьсот",
+            "siedemset": "семьсот",
             "osiemset": "восемьсот",
-            "dziewięćсет": "девятьсот",
+            "dziewięćset": "девятьсот",
             "tysiąc": "тысяча",
             # Zwroty
             "jak się masz?": "как дела?",
@@ -215,7 +217,9 @@ class PolishTrainerBot:
             "ile to kosztuje?": "сколько это стоит?",
             "gdzie jest toaleta?": "где туалет?",
         }
+        # категории (ключи совпадают с CSV файлами)
         self.categories: Dict[str, List[str]] = {
+            # Podstawy
             "powitania": [
                 "dzień dobry", "dobry wieczór", "cześć", "do widzenia",
                 "dziękuję", "proszę", "tak", "nie", "pa", "na razie"
@@ -230,24 +234,34 @@ class PolishTrainerBot:
             ],
             "liczby_10_20": [
                 "jedenaście", "dwanaście", "trzynaście", "czternaście",
-                "piętnaście", "szesnaście", "siedемnaście", "osiемnaście",
+                "piętnaście", "szesnaście", "siedemnaście", "osiemnaście",
                 "dziewiętnaście", "dwadzieścia"
             ],
             "liczby_20_100": [
-                "trzydzieści", "czterdzieści", "pięćdziesiąt", "sześćdziesiąt",
-                "siedемdziesiąt", "osiемdziesiąт", "dziewięćdziesiąт"
+                "trzydzieści", "czterdzieści", "pięćdziesiąт", "sześćdziesiąт",
+                "siedemdziesiąт", "osiemdziesiąт", "dziewięćdziesiąт"
             ],
             "liczby_100_1000": [
                 "sto", "dwieście", "trzysta", "czterysta", "pięćсет",
-                "sześćset", "siedемset", "osiемset", "dziewięćсет", "tysiąc"
+                "sześćset", "siedемset", "osiemset", "dziewięćсет", "tysiąc"
             ],
             "zwroty": [
                 "jak się masz?", "miło mi cię poznać", "nie rozumiem",
                 "mówisz po angielsku?", "ile to kosztuje?",
                 "gdzie jest toaleta?"
             ],
+
+            # Остальные подтянутся из CSV при наличии:
+            # jedzenie_owoce, jedzenie_warzywa, ...; rutyna; rodzina/semya; czas_wolny; mieszkanie
         }
+
         self.load_csv_vocabulary()
+
+        # после загрузки — алфавитно отсортируем слова в категориях
+        for k, lst in self.categories.items():
+            self.categories[k] = sorted(list(dict.fromkeys(lst)),
+                                        key=_strip_accents)
+
         self.user_scores: Dict[int, Dict] = {}
         self.quiz_sessions: Dict[int, Dict] = {}
 
@@ -260,8 +274,8 @@ class PolishTrainerBot:
                     reader = csv.reader(f, delimiter=";")
                     for row in reader:
                         if len(row) >= 2:
-                            pl, ru = (row[0] or "").strip(), (row[1]
-                                                              or "").strip()
+                            pl = (row[0] or "").strip()
+                            ru = (row[1] or "").strip()
                             if pl and ru:
                                 self.vocabulary[pl] = ru
                                 self.categories[cat_key].append(pl)
@@ -297,6 +311,8 @@ class PolishTrainerBot:
                         items.append((w, self.vocabulary[w]))
         else:
             items = list(self.vocabulary.items())
+        # алфавитная сортировка по польскому
+        items.sort(key=lambda x: _strip_accents(x[0]))
         return items
 
 
@@ -306,15 +322,29 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 router = Router()
 
-# ── Группы/названия ───────────────────────────────────────────────────────────
+# ── Группы и названия ─────────────────────────────────────────────────────────
 GROUPS = {
     "podstawy": [
         "powitania", "kolory", "liczby_0_10", "liczby_10_20", "liczby_20_100",
         "liczby_100_1000", "zwroty"
-    ]
+    ],
+    "jedzenie": [
+        "jedzenie_owoce", "jedzenie_warzywa", "jedzenie_mieso",
+        "jedzenie_ryby", "jedzenie_nabial", "jedzenie_pieczywo",
+        "jedzenie_napoje", "jedzenie_slodycze", "jedzenie_przyprawy"
+    ],
+    "rutyna": ["rutyna"],
+    "rodzina": ["rodzina", "semya"],
+    "czas_wolny": ["czas_wolny"],
+    "mieszkanie": ["mieszkanie"],
 }
 NAMES_PL = {
     "podstawy": "Podstawy",
+    "jedzenie": "Jedzenie",
+    "rutyna": "Rutyna",
+    "rodzina": "Rodzina",
+    "czas_wolny": "Czas wolny",
+    "mieszkanie": "Mieszkanie",
     "powitania": "Powitania",
     "kolory": "Kolory",
     "zwroty": "Zwroty",
@@ -322,11 +352,31 @@ NAMES_PL = {
     "liczby_10_20": "Liczby 10–20",
     "liczby_20_100": "Liczby 20–100",
     "liczby_100_1000": "Liczby 100–1000",
+    "jedzenie_owoce": "Owoce",
+    "jedzenie_warzywa": "Warzywa",
+    "jedzenie_mieso": "Mięso",
+    "jedzenie_ryby": "Ryby",
+    "jedzenie_nabial": "Nabiał",
+    "jedzenie_pieczywo": "Pieczywo",
+    "jedzenie_napoje": "Napoje",
+    "jedzenie_slodycze": "Słodycze",
+    "jedzenie_przyprawy": "Przyprawy",
+    "rodzina": "Rodzina",
+    "semya": "Rodzina",
+    "czas_wolny": "Czas wolny",
+    "mieszkanie": "Mieszkanie",
 }
 
 
 def icon_for_group(gkey: str) -> str:
-    return {"podstawy": "👋"}.get(gkey, "📁")
+    return {
+        "podstawy": "👋",
+        "jedzenie": "🍽️",
+        "rodzina": "👨‍👩‍👧‍👦",
+        "rutyna": "🕒",
+        "czas_wolny": "🎯",
+        "mieszkanie": "🏠"
+    }.get(gkey, "📁")
 
 
 # ── Клавиатуры ────────────────────────────────────────────────────────────────
@@ -352,6 +402,7 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
 def get_groups_keyboard() -> InlineKeyboardMarkup:
     rows = []
     for gkey, cats in GROUPS.items():
+        # показываем группу, только если в ней есть хотя бы одна непустая категория
         existing = [
             c for c in cats
             if c in trainer.categories and trainer.categories[c]
@@ -361,7 +412,7 @@ def get_groups_keyboard() -> InlineKeyboardMarkup:
         rows.append([
             InlineKeyboardButton(
                 text=
-                f"{icon_for_group(gkey)} {NAMES_PL.get(gkey,gkey.capitalize())}",
+                f"{icon_for_group(gkey)} {NAMES_PL.get(gkey, gkey.capitalize())}",
                 callback_data=f"learn_group:{gkey}")
         ])
     rows.append(
@@ -369,23 +420,35 @@ def get_groups_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_group_categories_keyboard(group_key: str,
-                                  train_mode: bool = False
-                                  ) -> InlineKeyboardMarkup:
+def get_group_categories_keyboard(group_key: str) -> InlineKeyboardMarkup:
     rows = []
     for ckey in GROUPS.get(group_key, []):
         if ckey in trainer.categories and trainer.categories[ckey]:
-            cb = (f"train_pick_cat:{ckey}" if train_mode else f"cat_{ckey}")
             rows.append([
                 InlineKeyboardButton(
                     text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
-                    callback_data=cb)
+                    callback_data=f"cat_{ckey}")
             ])
-    rows.append([
-        InlineKeyboardButton(
-            text="🔙 Wróć",
-            callback_data=("nav_train" if train_mode else "nav_learn"))
-    ])
+    rows.append(
+        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_learn")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# отдельная клавиатура для «Przeglądaj» (идём на browse_cat, чтобы были стрелки)
+def get_group_categories_keyboard_browse(
+        group_key: str) -> InlineKeyboardMarkup:
+    rows = []
+    for ckey in GROUPS.get(group_key, []):
+        if ckey in trainer.categories and trainer.categories[ckey]:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
+                    callback_data=
+                    f"browse_cat:{group_key}:{ckey}:0"  # страница 0
+                )
+            ])
+    rows.append(
+        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_browse")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -393,6 +456,7 @@ def kb_pagination(group_key: str, ckey: str, page: int, total: int,
                   cats_in_group: List[str]):
     prev_p = (page - 1) % total
     next_p = (page + 1) % total
+    # соседние категории в группе
     i = cats_in_group.index(ckey)
     prev_c = cats_in_group[i - 1] if i > 0 else cats_in_group[-1]
     next_c = cats_in_group[
@@ -464,19 +528,20 @@ async def nav_learn_group(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("cat_"))
 async def show_category(cb: CallbackQuery):
     key = cb.data.replace("cat_", "")
-    lst = trainer.categories.get(key, [])
-    pairs = [(w, trainer.vocabulary[w]) for w in lst
-             if w in trainer.vocabulary]
+    lst = sorted([
+        w for w in trainer.categories.get(key, []) if w in trainer.vocabulary
+    ],
+                 key=_strip_accents)
     name = NAMES_PL.get(key, key.capitalize())
 
-    if not pairs:
+    if not lst:
         await cb.message.edit_text("❌ W tej kategorii na razie nie ma słów.",
                                    reply_markup=get_main_keyboard())
         return await cb.answer()
 
     lines = [f"📚 <b>{name}</b>\n"]
-    for pl, ru in pairs:
-        lines.append(f"🇵🇱 <code>{pl}</code> → {ru}")
+    for pl in lst:
+        lines.append(f"🇵🇱 <code>{pl}</code> → {trainer.vocabulary[pl]}")
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📖 Grupy", callback_data="nav_learn")],
@@ -491,15 +556,21 @@ async def show_category(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── Browse: группы → категории → стрелки и пагинация ─────────────────────────
+# ── Przeglądaj: группы → категории (browse) → стрелки/пагинация ──────────────
 @router.callback_query(F.data == "nav_browse")
 async def nav_browse(cb: CallbackQuery):
     kb = []
-    for g in GROUPS.keys():
+    for gkey, cats in GROUPS.items():
+        existing = [
+            c for c in cats
+            if c in trainer.categories and trainer.categories[c]
+        ]
+        if not existing:
+            continue
         kb.append([
             InlineKeyboardButton(
-                text=f"{icon_for_group(g)} {NAMES_PL.get(g,g)}",
-                callback_data=f"browse_group:{g}")
+                text=f"{icon_for_group(gkey)} {NAMES_PL.get(gkey,gkey)}",
+                callback_data=f"browse_group:{gkey}")
         ])
     kb.append(
         [InlineKeyboardButton(text="🔙 Wróć", callback_data="back_to_menu")])
@@ -515,7 +586,7 @@ async def browse_group(cb: CallbackQuery):
     g = cb.data.split(":", 1)[1]
     await cb.message.edit_text(
         f"🔎 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
-        reply_markup=get_group_categories_keyboard(g),
+        reply_markup=get_group_categories_keyboard_browse(g),
         parse_mode="HTML")
     await cb.answer()
 
@@ -524,16 +595,19 @@ async def browse_group(cb: CallbackQuery):
 async def browse_cat(cb: CallbackQuery):
     _, group_key, ckey, page_s = cb.data.split(":")
     page = int(page_s)
-    words = trainer.categories.get(ckey, [])
-    items = [(w, trainer.vocabulary[w]) for w in words
-             if w in trainer.vocabulary]
-    if not items:
+    words = [
+        w for w in trainer.categories.get(ckey, []) if w in trainer.vocabulary
+    ]
+    words.sort(key=_strip_accents)
+    if not words:
         await cb.message.edit_text(
-            "❌ Pusto.", reply_markup=get_group_categories_keyboard(group_key))
+            "❌ Pusto.",
+            reply_markup=get_group_categories_keyboard_browse(group_key))
         return await cb.answer()
 
-    chunk, page, total = paginate(items, page, PAGE_SIZE)
-    lines = [f"📃 <b>{NAMES_PL.get(ckey, ckey)}</b> — razem {len(items)}"]
+    chunk, page, total = paginate([(w, trainer.vocabulary[w]) for w in words],
+                                  page, PAGE_SIZE)
+    lines = [f"📃 <b>{NAMES_PL.get(ckey, ckey)}</b> — razem {len(words)}"]
     for pl, ru in chunk:
         digits = [x for x in valid_answers_pl(pl) if x.isdigit()]
         tail = f" • dop.: {', '.join(digits)}" if digits else ""
@@ -583,24 +657,10 @@ async def train_scope(cb: CallbackQuery, state: FSMContext):
         ])
         await cb.message.edit_text("Wybierz kierunek quizu:", reply_markup=kb)
     else:
-        await cb.message.edit_text("🎯 Wybierz kategorię:",
-                                   reply_markup=get_group_categories_keyboard(
-                                       "podstawy", train_mode=True),
-                                   parse_mode="HTML")
-    await cb.answer()
-
-
-@router.callback_query(F.data.startswith("train_pick_cat:"))
-async def train_pick_cat(cb: CallbackQuery, state: FSMContext):
-    ckey = cb.data.split(":", 1)[1]
-    await state.update_data(train_cats=[ckey])
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇵🇱 → 🇷🇺", callback_data="quiz_pl_ru")],
-        [InlineKeyboardButton(text="🇷🇺 → 🇵🇱", callback_data="quiz_ru_pl")],
-        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_train")],
-    ])
-    await cb.message.edit_text(
-        f"🧠 {NAMES_PL.get(ckey, ckey)} — wybierz kierunek:", reply_markup=kb)
+        await cb.message.edit_text(
+            "🎯 Wybierz kategorię (Podstawy):",
+            reply_markup=get_group_categories_keyboard_browse("podstawy"),
+            parse_mode="HTML")
     await cb.answer()
 
 
@@ -608,13 +668,13 @@ async def train_pick_cat(cb: CallbackQuery, state: FSMContext):
 async def quiz_start(cb: CallbackQuery, state: FSMContext):
     uid = cb.from_user.id
     direction = "pl_ru" if cb.data == "quiz_pl_ru" else "ru_pl"
-    data = await state.get_data()
-    pool_keys = data.get("train_cats")
-    words = trainer.flat_items(pool_keys)
+
+    # если перед этим выбиралась категория через browse_cat, её не сохраняли — качаем весь словарь
+    words = trainer.flat_items()
     if not words:
         return await cb.message.answer("❌ Brak słów w wybranym zakresie.")
     random.shuffle(words)
-    words = words[:10]  # длина квиза по умолчанию
+    words = words[:10]
 
     trainer.quiz_sessions[uid] = {
         "words": words,
