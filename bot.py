@@ -28,7 +28,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN обязателен: добавь его в Secrets/Env.")
 
-PAGE_SIZE = 12  # для пагинации в «Przeglądaj»
+PAGE_SIZE = 12  # для пагинации в «Ucz się słówek»
 
 
 # ── Утилиты ──────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ def _strip_accents(s: str) -> str:
                    if unicodedata.category(c) != "Mn")
 
 
-# числительные → цифры (для принятия «50» как верного ответа к «pięćdziesiąt»)
+# числительные → цифры (для принятия «50» к «pięćdziesiąt»)
 _NUM_WORD = {
     "zero": 0,
     "jeden": 1,
@@ -155,11 +155,12 @@ class PolishTrainerBot:
             "dzień dobry": "добрый день",
             "dobry wieczór": "добрый вечер",
             "cześć": "привет/пока",
-            "pa": "пока",
-            "na razie": "пока",
             "do widzenia": "до свидания",
+            "na razie": "пока",
+            "pa": "пока",
             "dziękuję": "спасибо",
             "proszę": "пожалуйста",
+            "przepraszam": "извините",
             "tak": "да",
             "nie": "нет",
             # Kolory
@@ -217,12 +218,13 @@ class PolishTrainerBot:
             "ile to kosztuje?": "сколько это стоит?",
             "gdzie jest toaleta?": "где туалет?",
         }
-        # категории (ключи совпадают с CSV файлами)
+        # категории
         self.categories: Dict[str, List[str]] = {
             # Podstawy
-            "powitania": [
+            "powitania": [  # смысловой порядок (не алфавит!)
                 "dzień dobry", "dobry wieczór", "cześć", "do widzenia",
-                "dziękuję", "proszę", "tak", "nie", "pa", "na razie"
+                "na razie", "pa", "dziękuję", "proszę", "przepraszam", "tak",
+                "nie"
             ],
             "kolory": [
                 "czerwony", "niebieski", "zielony", "żółty", "czarny", "biały",
@@ -234,16 +236,16 @@ class PolishTrainerBot:
             ],
             "liczby_10_20": [
                 "jedenaście", "dwanaście", "trzynaście", "czternaście",
-                "piętnaście", "szesnaście", "siedemnaście", "osiemnaście",
-                "dziewiętnaście", "dwadzieścia"
+                "piętnaście", "szesnaście", "siedemnaście", "osiемnaście",
+                "dziewięтнаście", "dwadzieścia"
             ],
             "liczby_20_100": [
                 "trzydzieści", "czterdzieści", "pięćdziesiąт", "sześćdziesiąт",
-                "siedemdziesiąт", "osiemdziesiąт", "dziewięćdziesiąт"
+                "siedемdziesiąт", "osiемdziesiąт", "dziewięćдziesiąт"
             ],
             "liczby_100_1000": [
                 "sto", "dwieście", "trzysta", "czterysta", "pięćсет",
-                "sześćset", "siedемset", "osiemset", "dziewięćсет", "tysiąc"
+                "sześćset", "siedемset", "osiемset", "dziewięćсет", "tysiąc"
             ],
             "zwroty": [
                 "jak się masz?", "miło mi cię poznać", "nie rozumiem",
@@ -257,10 +259,11 @@ class PolishTrainerBot:
 
         self.load_csv_vocabulary()
 
-        # после загрузки — алфавитно отсортируем слова в категориях
+        # сортировка внутри категорий — по алфавиту, КРОМЕ powitania (там фиксированный порядок)
         for k, lst in self.categories.items():
-            self.categories[k] = sorted(list(dict.fromkeys(lst)),
-                                        key=_strip_accents)
+            if k != "powitania":
+                self.categories[k] = sorted(list(dict.fromkeys(lst)),
+                                            key=_strip_accents)
 
         self.user_scores: Dict[int, Dict] = {}
         self.quiz_sessions: Dict[int, Dict] = {}
@@ -390,10 +393,6 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🎯 Tryb treningowy",
                                  callback_data="nav_train")
         ],
-        [
-            InlineKeyboardButton(text="🔎 Przeglądaj",
-                                 callback_data="nav_browse")
-        ],
         [InlineKeyboardButton(text="🎲 Losowe słowo", callback_data="random")],
         [InlineKeyboardButton(text="📊 Postępy", callback_data="progress")],
     ])
@@ -402,7 +401,6 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
 def get_groups_keyboard() -> InlineKeyboardMarkup:
     rows = []
     for gkey, cats in GROUPS.items():
-        # показываем группу, только если в ней есть хотя бы одна непустая категория
         existing = [
             c for c in cats
             if c in trainer.categories and trainer.categories[c]
@@ -420,22 +418,7 @@ def get_groups_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_group_categories_keyboard(group_key: str) -> InlineKeyboardMarkup:
-    rows = []
-    for ckey in GROUPS.get(group_key, []):
-        if ckey in trainer.categories and trainer.categories[ckey]:
-            rows.append([
-                InlineKeyboardButton(
-                    text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
-                    callback_data=f"cat_{ckey}")
-            ])
-    rows.append(
-        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_learn")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-# отдельная клавиатура для «Przeglądaj» (идём на browse_cat, чтобы были стрелки)
-def get_group_categories_keyboard_browse(
+def get_group_categories_keyboard_learn(
         group_key: str) -> InlineKeyboardMarkup:
     rows = []
     for ckey in GROUPS.get(group_key, []):
@@ -444,19 +427,18 @@ def get_group_categories_keyboard_browse(
                 InlineKeyboardButton(
                     text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
                     callback_data=
-                    f"browse_cat:{group_key}:{ckey}:0"  # страница 0
+                    f"learn_cat:{group_key}:{ckey}:0"  # сразу открываем пагинацию
                 )
             ])
     rows.append(
-        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_browse")])
+        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_learn")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def kb_pagination(group_key: str, ckey: str, page: int, total: int,
-                  cats_in_group: List[str]):
+def kb_learn_pagination(group_key: str, ckey: str, page: int, total: int,
+                        cats_in_group: List[str]):
     prev_p = (page - 1) % total
     next_p = (page + 1) % total
-    # соседние категории в группе
     i = cats_in_group.index(ckey)
     prev_c = cats_in_group[i - 1] if i > 0 else cats_in_group[-1]
     next_c = cats_in_group[
@@ -464,25 +446,25 @@ def kb_pagination(group_key: str, ckey: str, page: int, total: int,
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
-                text="◀️", callback_data=f"browse_cat:{group_key}:{prev_c}:0"),
+                text="◀️", callback_data=f"learn_cat:{group_key}:{prev_c}:0"),
             InlineKeyboardButton(text=f"{NAMES_PL.get(ckey, ckey)}",
                                  callback_data="noop"),
             InlineKeyboardButton(
-                text="▶️", callback_data=f"browse_cat:{group_key}:{next_c}:0")
+                text="▶️", callback_data=f"learn_cat:{group_key}:{next_c}:0")
         ],
         [
             InlineKeyboardButton(
                 text="⏮",
-                callback_data=f"browse_cat:{group_key}:{ckey}:{prev_p}"),
+                callback_data=f"learn_cat:{group_key}:{ckey}:{prev_p}"),
             InlineKeyboardButton(text=f"{page+1}/{total}",
                                  callback_data="noop"),
             InlineKeyboardButton(
                 text="⏭",
-                callback_data=f"browse_cat:{group_key}:{ckey}:{next_p}")
+                callback_data=f"learn_cat:{group_key}:{ckey}:{next_p}")
         ],
         [
             InlineKeyboardButton(text="🔙 Wróć",
-                                 callback_data=f"browse_group:{group_key}")
+                                 callback_data=f"learn_group:{group_key}")
         ],
     ])
 
@@ -506,7 +488,7 @@ async def back_to_menu(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── Learn: группы → категории → список ────────────────────────────────────────
+# ── Ucz się słówek: группы → категории (с пагинацией и стрелками) ────────────
 @router.callback_query(F.data == "nav_learn")
 async def nav_learn(cb: CallbackQuery):
     await cb.message.edit_text("📖 <b>Ucz się słówek</b>\n\nWybierz grupę:",
@@ -517,97 +499,36 @@ async def nav_learn(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("learn_group:"))
 async def nav_learn_group(cb: CallbackQuery):
-    group_key = cb.data.split(":", 1)[1]
-    await cb.message.edit_text(
-        f"📚 <b>{NAMES_PL.get(group_key, group_key.capitalize())}</b>\n\nWybierz kategorię:",
-        reply_markup=get_group_categories_keyboard(group_key),
-        parse_mode="HTML")
-    await cb.answer()
-
-
-@router.callback_query(F.data.startswith("cat_"))
-async def show_category(cb: CallbackQuery):
-    key = cb.data.replace("cat_", "")
-    lst = sorted([
-        w for w in trainer.categories.get(key, []) if w in trainer.vocabulary
-    ],
-                 key=_strip_accents)
-    name = NAMES_PL.get(key, key.capitalize())
-
-    if not lst:
-        await cb.message.edit_text("❌ W tej kategorii na razie nie ma słów.",
-                                   reply_markup=get_main_keyboard())
-        return await cb.answer()
-
-    lines = [f"📚 <b>{name}</b>\n"]
-    for pl in lst:
-        lines.append(f"🇵🇱 <code>{pl}</code> → {trainer.vocabulary[pl]}")
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Grupy", callback_data="nav_learn")],
-        [
-            InlineKeyboardButton(text="🏠 Menu główne",
-                                 callback_data="back_to_menu")
-        ],
-    ])
-    await cb.message.edit_text("\n".join(lines),
-                               reply_markup=kb,
-                               parse_mode="HTML")
-    await cb.answer()
-
-
-# ── Przeglądaj: группы → категории (browse) → стрелки/пагинация ──────────────
-@router.callback_query(F.data == "nav_browse")
-async def nav_browse(cb: CallbackQuery):
-    kb = []
-    for gkey, cats in GROUPS.items():
-        existing = [
-            c for c in cats
-            if c in trainer.categories and trainer.categories[c]
-        ]
-        if not existing:
-            continue
-        kb.append([
-            InlineKeyboardButton(
-                text=f"{icon_for_group(gkey)} {NAMES_PL.get(gkey,gkey)}",
-                callback_data=f"browse_group:{gkey}")
-        ])
-    kb.append(
-        [InlineKeyboardButton(text="🔙 Wróć", callback_data="back_to_menu")])
-    await cb.message.edit_text(
-        "🔎 <b>Przeglądaj</b>\n\nWybierz grupę:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
-        parse_mode="HTML")
-    await cb.answer()
-
-
-@router.callback_query(F.data.startswith("browse_group:"))
-async def browse_group(cb: CallbackQuery):
     g = cb.data.split(":", 1)[1]
     await cb.message.edit_text(
-        f"🔎 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
-        reply_markup=get_group_categories_keyboard_browse(g),
+        f"📚 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
+        reply_markup=get_group_categories_keyboard_learn(g),
         parse_mode="HTML")
     await cb.answer()
 
 
-@router.callback_query(F.data.startswith("browse_cat:"))
-async def browse_cat(cb: CallbackQuery):
+@router.callback_query(F.data.startswith("learn_cat:"))
+async def learn_cat(cb: CallbackQuery):
     _, group_key, ckey, page_s = cb.data.split(":")
     page = int(page_s)
+
     words = [
         w for w in trainer.categories.get(ckey, []) if w in trainer.vocabulary
     ]
-    words.sort(key=_strip_accents)
+    # особый случай: powitania — НЕ сортируем (там задан фиксированный смысловой порядок)
+    if ckey != "powitania":
+        words.sort(key=_strip_accents)
+
     if not words:
         await cb.message.edit_text(
             "❌ Pusto.",
-            reply_markup=get_group_categories_keyboard_browse(group_key))
+            reply_markup=get_group_categories_keyboard_learn(group_key))
         return await cb.answer()
 
-    chunk, page, total = paginate([(w, trainer.vocabulary[w]) for w in words],
-                                  page, PAGE_SIZE)
-    lines = [f"📃 <b>{NAMES_PL.get(ckey, ckey)}</b> — razem {len(words)}"]
+    items = [(w, trainer.vocabulary[w]) for w in words]
+    chunk, page, total = paginate(items, page, PAGE_SIZE)
+
+    lines = [f"📃 <b>{NAMES_PL.get(ckey, ckey)}</b> — razem {len(items)}"]
     for pl, ru in chunk:
         digits = [x for x in valid_answers_pl(pl) if x.isdigit()]
         tail = f" • dop.: {', '.join(digits)}" if digits else ""
@@ -618,14 +539,14 @@ async def browse_cat(cb: CallbackQuery):
         if c in trainer.categories and trainer.categories[c]
     ]
     await cb.message.edit_text("\n".join(lines),
-                               reply_markup=kb_pagination(
+                               reply_markup=kb_learn_pagination(
                                    group_key, ckey, page, total,
                                    cats_in_group),
                                parse_mode="HTML")
     await cb.answer()
 
 
-# ── Тренировка ────────────────────────────────────────────────────────────────
+# ── Тренировка: любой раздел → любая категория ────────────────────────────────
 @router.callback_query(F.data == "nav_train")
 async def nav_train(cb: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -645,6 +566,38 @@ async def nav_train(cb: CallbackQuery):
     await cb.answer()
 
 
+def kb_train_groups() -> InlineKeyboardMarkup:
+    rows = []
+    for gkey, cats in GROUPS.items():
+        existing = [
+            c for c in cats
+            if c in trainer.categories and trainer.categories[c]
+        ]
+        if existing:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"{icon_for_group(gkey)} {NAMES_PL.get(gkey,gkey)}",
+                    callback_data=f"train_pick_group:{gkey}")
+            ])
+    rows.append(
+        [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_train")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def kb_train_cats(group_key: str) -> InlineKeyboardMarkup:
+    rows = []
+    for ckey in GROUPS.get(group_key, []):
+        if ckey in trainer.categories and trainer.categories[ckey]:
+            rows.append([
+                InlineKeyboardButton(text=f"📂 {NAMES_PL.get(ckey,ckey)}",
+                                     callback_data=f"train_pick_cat:{ckey}")
+            ])
+    rows.append([
+        InlineKeyboardButton(text="🔙 Wróć", callback_data="train_scope:bycat")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 @router.callback_query(F.data.startswith("train_scope:"))
 async def train_scope(cb: CallbackQuery, state: FSMContext):
     scope = cb.data.split(":", 1)[1]
@@ -657,10 +610,36 @@ async def train_scope(cb: CallbackQuery, state: FSMContext):
         ])
         await cb.message.edit_text("Wybierz kierunek quizu:", reply_markup=kb)
     else:
-        await cb.message.edit_text(
-            "🎯 Wybierz kategorię (Podstawy):",
-            reply_markup=get_group_categories_keyboard_browse("podstawy"),
-            parse_mode="HTML")
+        await cb.message.edit_text("🎯 Wybierz grupę:",
+                                   reply_markup=kb_train_groups(),
+                                   parse_mode="HTML")
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("train_pick_group:"))
+async def train_pick_group(cb: CallbackQuery):
+    g = cb.data.split(":", 1)[1]
+    await cb.message.edit_text(
+        f"🎯 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
+        reply_markup=kb_train_cats(g),
+        parse_mode="HTML")
+    await cb.answer()
+
+
+@router.callback_query(F.data.startswith("train_pick_cat:"))
+async def train_pick_cat(cb: CallbackQuery, state: FSMContext):
+    ckey = cb.data.split(":", 1)[1]
+    await state.update_data(train_cats=[ckey])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇵🇱 → 🇷🇺", callback_data="quiz_pl_ru")],
+        [InlineKeyboardButton(text="🇷🇺 → 🇵🇱", callback_data="quiz_ru_pl")],
+        [
+            InlineKeyboardButton(text="🔙 Wróć",
+                                 callback_data="train_scope:bycat")
+        ],
+    ])
+    await cb.message.edit_text(
+        f"🧠 {NAMES_PL.get(ckey, ckey)} — wybierz kierunek:", reply_markup=kb)
     await cb.answer()
 
 
@@ -668,9 +647,10 @@ async def train_scope(cb: CallbackQuery, state: FSMContext):
 async def quiz_start(cb: CallbackQuery, state: FSMContext):
     uid = cb.from_user.id
     direction = "pl_ru" if cb.data == "quiz_pl_ru" else "ru_pl"
+    data = await state.get_data()
+    pool_keys = data.get("train_cats")
 
-    # если перед этим выбиралась категория через browse_cat, её не сохраняли — качаем весь словарь
-    words = trainer.flat_items()
+    words = trainer.flat_items(pool_keys)
     if not words:
         return await cb.message.answer("❌ Brak słów w wybranym zakresie.")
     random.shuffle(words)
