@@ -28,6 +28,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN обязателен: добавь его в Secrets/Env.")
 
+ADMIN_ID = int(os.getenv("ADMIN_ID",
+                         "0"))  # сюда можно будет подставить свой id
+
 PAGE_SIZE = 12  # для пагинации в «Ucz się słówek»
 
 
@@ -109,11 +112,14 @@ _NUM_WORD = {
 
 def _word_to_number_pl(s: str):
     t = _strip_accents(s)
-    if t in _NUM_WORD: return _NUM_WORD[t]
+    if t in _NUM_WORD:
+        return _NUM_WORD[t]
     total = 0
     for p in t.split():
-        if p in _NUM_WORD: total += _NUM_WORD[p]
-        else: return None
+        if p in _NUM_WORD:
+            total += _NUM_WORD[p]
+        else:
+            return None
     return total or None
 
 
@@ -145,13 +151,17 @@ class QuizStates(StatesGroup):
     waiting_for_answer = State()
 
 
+class FeedbackStates(StatesGroup):
+    waiting_for_feedback = State()
+
+
 # ── Модель данных ─────────────────────────────────────────────────────────────
 class PolishTrainerBot:
 
     def __init__(self):
         # базовые слова
         self.vocabulary: Dict[str, str] = {
-            # Powitania
+            # Powitania (смысловой порядок задаётся в categories)
             "dzień dobry": "добрый день",
             "dobry wieczór": "добрый вечер",
             "cześć": "привет/пока",
@@ -163,6 +173,7 @@ class PolishTrainerBot:
             "przepraszam": "извините",
             "tak": "да",
             "nie": "нет",
+
             # Kolory
             "czerwony": "красный",
             "niebieski": "синий",
@@ -172,6 +183,7 @@ class PolishTrainerBot:
             "biały": "белый",
             "różowy": "розовый",
             "fioletowy": "фиолетовый",
+
             # Liczby
             "jeden": "один",
             "dwa": "два",
@@ -210,18 +222,52 @@ class PolishTrainerBot:
             "osiemset": "восемьсот",
             "dziewięćset": "девятьсот",
             "tysiąc": "тысяча",
+
             # Zwroty
             "jak się masz?": "как дела?",
             "miło mi cię poznać": "приятно познакомиться",
             "nie rozumiem": "я не понимаю",
+            "мówisz po ангielsku?": "ты говоришь по-английски?",
             "mówisz po angielsku?": "ты говоришь по-английски?",
             "ile to kosztuje?": "сколько это стоит?",
             "gdzie jest toaleta?": "где туалет?",
+
+            # Ubrania
+            "koszulka": "футболка",
+            "koszula": "рубашка",
+            "spodnie": "штаны",
+            "dżinsy": "джинсы",
+            "spódnica": "юбка",
+            "sukienka": "платье",
+            "sweter": "свитер",
+            "bluza": "толстовка",
+            "kurtka": "куртка",
+            "płaszcz": "пальто",
+            "buty": "обувь",
+            "buty sportowe": "кроссовки",
+            "czapka": "шапка",
+            "szalik": "шарф",
+            "rękawiczki": "перчатки",
+
+            # Sport
+            "piłka nożna": "футбол",
+            "koszykówka": "баскетбол",
+            "siatkówka": "волейбол",
+            "tenis": "теннис",
+            "pływanie": "плавание",
+            "bieganie": "бег",
+            "jazda na rowerze": "езда на велосипеде",
+            "narciarstwo": "лыжный спорт",
+            "łyżwiarstwo": "катание на коньках",
+            "joga": "йога",
+            "gimnastyka": "гимнастика",
+            "sporty siłowe": "силовые виды спорта",
         }
+
         # категории
         self.categories: Dict[str, List[str]] = {
             # Podstawy
-            "powitania": [  # смысловой порядок (не алфавит!)
+            "powitania": [  # смысловой порядок (не сортируем)
                 "dzień dobry", "dobry wieczór", "cześć", "do widzenia",
                 "na razie", "pa", "dziękuję", "proszę", "przepraszam", "tak",
                 "nie"
@@ -235,22 +281,34 @@ class PolishTrainerBot:
                 "osiem", "dziewięć", "dziesięć"
             ],
             "liczby_10_20": [
-                "jedenaście", "dwanaście", "trzynaście", "czternaście",
-                "piętnaście", "szesnaście", "siedemnaście", "osiемnaście",
-                "dziewięтнаście", "dwadzieścia"
+                "jedenaście", "dwanaście", "трзynaście", "trzynaście",
+                "czternaście", "piętnaście", "szesnaście", "siedemnaście",
+                "osiemnaście", "dziewiętnaście", "dwadzieścia"
             ],
             "liczby_20_100": [
-                "trzydzieści", "czterdzieści", "pięćdziesiąт", "sześćdziesiąт",
-                "siedемdziesiąт", "osiемdziesiąт", "dziewięćдziesiąт"
+                "trzydzieści", "czterdzieści", "pięćdziesiąt", "sześćdziesiąt",
+                "siedemdziesiąt", "osiemdziesiąt", "dziewięćdziesiąt"
             ],
             "liczby_100_1000": [
-                "sto", "dwieście", "trzysta", "czterysta", "pięćсет",
-                "sześćset", "siedемset", "osiемset", "dziewięćсет", "tysiąc"
+                "sto", "dwieście", "trzysta", "czterysta", "pięćset",
+                "sześćset", "siedemset", "osiemset", "dziewięćset", "tysiąc"
             ],
             "zwroty": [
                 "jak się masz?", "miło mi cię poznać", "nie rozumiem",
                 "mówisz po angielsku?", "ile to kosztuje?",
                 "gdzie jest toaleta?"
+            ],
+
+            # Ubrania & Sport (свои группы)
+            "ubrania": [
+                "koszulka", "koszula", "spodnie", "dżinsy", "spódnica",
+                "sukienka", "sweter", "bluza", "kurtka", "płaszcz", "buty",
+                "buty sportowe", "czapka", "szalik", "rękawiczki"
+            ],
+            "sport": [
+                "piłka nożna", "koszykówka", "siatkówka", "tenis", "pływanie",
+                "bieganie", "jazda na rowerze", "narciarstwo", "łyżwiarstwo",
+                "joga", "gimnastyka", "sporty siłowe"
             ],
 
             # Остальные подтянутся из CSV при наличии:
@@ -262,6 +320,7 @@ class PolishTrainerBot:
         # сортировка внутри категорий — по алфавиту, КРОМЕ powitania (там фиксированный порядок)
         for k, lst in self.categories.items():
             if k != "powitania":
+                # убираем дубли и сортируем
                 self.categories[k] = sorted(list(dict.fromkeys(lst)),
                                             key=_strip_accents)
 
@@ -340,6 +399,8 @@ GROUPS = {
     "rodzina": ["rodzina", "semya"],
     "czas_wolny": ["czas_wolny"],
     "mieszkanie": ["mieszkanie"],
+    "ubrania_group": ["ubrania"],
+    "sport_group": ["sport"],
 }
 NAMES_PL = {
     "podstawy": "Podstawy",
@@ -348,6 +409,8 @@ NAMES_PL = {
     "rodzina": "Rodzina",
     "czas_wolny": "Czas wolny",
     "mieszkanie": "Mieszkanie",
+    "ubrania_group": "Ubrania",
+    "sport_group": "Sport",
     "powitania": "Powitania",
     "kolory": "Kolory",
     "zwroty": "Zwroty",
@@ -368,6 +431,8 @@ NAMES_PL = {
     "semya": "Rodzina",
     "czas_wolny": "Czas wolny",
     "mieszkanie": "Mieszkanie",
+    "ubrania": "Ubrania",
+    "sport": "Sport",
 }
 
 
@@ -378,7 +443,9 @@ def icon_for_group(gkey: str) -> str:
         "rodzina": "👨‍👩‍👧‍👦",
         "rutyna": "🕒",
         "czas_wolny": "🎯",
-        "mieszkanie": "🏠"
+        "mieszkanie": "🏠",
+        "ubrania_group": "👕",
+        "sport_group": "🏀",
     }.get(gkey, "📁")
 
 
@@ -395,6 +462,10 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton(text="🎲 Losowe słowo", callback_data="random")],
         [InlineKeyboardButton(text="📊 Postępy", callback_data="progress")],
+        [
+            InlineKeyboardButton(text="Обратная связь",
+                                 callback_data="feedback")
+        ],
     ])
 
 
@@ -427,7 +498,7 @@ def get_group_categories_keyboard_learn(
                 InlineKeyboardButton(
                     text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
                     callback_data=
-                    f"learn_cat:{group_key}:{ckey}:0"  # сразу открываем пагинацию
+                    f"learn_cat:{group_key}:{ckey}:0"  # сразу пагинация
                 )
             ])
     rows.append(
@@ -482,15 +553,68 @@ async def cmd_start(message: Message):
 
 
 @router.callback_query(F.data == "back_to_menu")
-async def back_to_menu(cb: CallbackQuery):
+async def back_to_menu(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
     await cb.message.edit_text("🏠 Menu główne\n\nWybierz opcję:",
                                reply_markup=get_main_keyboard())
     await cb.answer()
 
 
+# ── Обратная связь ───────────────────────────────────────────────────────────
+@router.callback_query(F.data == "feedback")
+async def feedback_start(cb: CallbackQuery, state: FSMContext):
+    await state.set_state(FeedbackStates.waiting_for_feedback)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❌ Отмена", callback_data="feedback_cancel")
+    ]])
+    await cb.message.edit_text(
+        "💬 Напиши, пожалуйста, своё сообщение.\n"
+        "Это может быть отзыв, идея или пожелание.\n\n"
+        "Чтобы отменить, нажми «Отмена».",
+        reply_markup=kb)
+    await cb.answer()
+
+
+@router.callback_query(F.data == "feedback_cancel")
+async def feedback_cancel(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await cb.message.edit_text("🏠 Возврат в меню.",
+                               reply_markup=get_main_keyboard())
+    await cb.answer("Отменено")
+
+
+@router.message(FeedbackStates.waiting_for_feedback)
+async def feedback_receive(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(
+            "Сообщение пустое. Напиши, пожалуйста, текст или нажми /start, чтобы выйти."
+        )
+        return
+
+    # отправляем подтверждение пользователю
+    await message.answer("Спасибо! 💌 Сообщение отправлено Оле.",
+                         reply_markup=get_main_keyboard())
+    await state.clear()
+
+    # если ADMIN_ID настроен — пересылаем сообщение тебе
+    if ADMIN_ID:
+        user = message.from_user
+        uname = f"@{user.username}" if user and user.username else "(без username)"
+        info = f"📩 Новое сообщение обратной связи\n"
+        info += f"От: {user.full_name if user else ''} {uname}\n"
+        info += f"ID: {user.id if user else '—'}\n\n"
+        info += text
+        try:
+            await bot.send_message(ADMIN_ID, info)
+        except Exception as e:
+            logger.error(f"Не удалось отправить сообщение админу: {e}")
+
+
 # ── Ucz się słówek: группы → категории (с пагинацией и стрелками) ────────────
 @router.callback_query(F.data == "nav_learn")
-async def nav_learn(cb: CallbackQuery):
+async def nav_learn(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
     await cb.message.edit_text("📖 <b>Ucz się słówek</b>\n\nWybierz grupę:",
                                reply_markup=get_groups_keyboard(),
                                parse_mode="HTML")
@@ -548,7 +672,8 @@ async def learn_cat(cb: CallbackQuery):
 
 # ── Тренировка: любой раздел → любая категория ────────────────────────────────
 @router.callback_query(F.data == "nav_train")
-async def nav_train(cb: CallbackQuery):
+async def nav_train(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🧠 Wszystkie słowa",
@@ -669,7 +794,8 @@ async def quiz_start(cb: CallbackQuery, state: FSMContext):
 
 async def ask_question(msg: Message, uid: int, state: FSMContext):
     sess = trainer.quiz_sessions.get(uid)
-    if not sess: return
+    if not sess:
+        return
     i = sess["current_question"]
     if i >= sess["total"]:
         return await finish_quiz(msg, uid)
@@ -743,7 +869,8 @@ async def end_q(cb: CallbackQuery, state: FSMContext):
     await cb.answer("❌ Zakończono")
     data = await state.get_data()
     uid = data.get("user_id")
-    if uid in trainer.quiz_sessions: del trainer.quiz_sessions[uid]
+    if uid in trainer.quiz_sessions:
+        del trainer.quiz_sessions[uid]
     await state.clear()
     await cb.message.answer("❌ Quiz zakończony.",
                             reply_markup=get_main_keyboard())
@@ -751,16 +878,20 @@ async def end_q(cb: CallbackQuery, state: FSMContext):
 
 async def finish_quiz(msg: Message, uid: int):
     sess = trainer.quiz_sessions.get(uid)
-    if not sess: return
+    if not sess:
+        return
     score, total = sess["score"], sess["total"]
     percent = (score / total * 100) if total else 0.0
     trainer.get_user_stats(uid)["quiz_count"] += 1
     del trainer.quiz_sessions[uid]
 
     text = f"🎉 Wynik: {score}/{total} ({percent:.1f}%)"
-    if percent >= 80: text += "\n🌟 Świetnie!"
-    elif percent >= 60: text += "\n👍 Dobrze!"
-    else: text += "\n📚 Ćwicz dalej!"
+    if percent >= 80:
+        text += "\n🌟 Świetnie!"
+    elif percent >= 60:
+        text += "\n👍 Dobrze!"
+    else:
+        text += "\n📚 Ćwicz dalej!"
     await msg.answer(text, reply_markup=get_main_keyboard())
 
 
