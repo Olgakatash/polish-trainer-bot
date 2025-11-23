@@ -8,7 +8,7 @@ import logging
 import os
 import random
 import unicodedata
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import CommandStart
@@ -28,8 +28,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN обязателен: добавь его в Secrets/Env.")
 
-ADMIN_ID = int(os.getenv("ADMIN_ID",
-                         "0"))  # сюда можно будет подставить свой id
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # твой Telegram ID, если задан
 
 PAGE_SIZE = 12  # для пагинации в «Ucz się słówek»
 
@@ -41,7 +40,6 @@ def _strip_accents(s: str) -> str:
                    if unicodedata.category(c) != "Mn")
 
 
-# числительные → цифры (для принятия «50» к «pięćdziesiąt»)
 _NUM_WORD = {
     "zero": 0,
     "jeden": 1,
@@ -110,20 +108,21 @@ _NUM_WORD = {
 }
 
 
-def _word_to_number_pl(s: str):
+def _word_to_number_pl(s: str) -> Optional[int]:
     t = _strip_accents(s)
     if t in _NUM_WORD:
         return _NUM_WORD[t]
     total = 0
-    for p in t.split():
-        if p in _NUM_WORD:
-            total += _NUM_WORD[p]
+    for part in t.split():
+        if part in _NUM_WORD:
+            total += _NUM_WORD[part]
         else:
             return None
     return total or None
 
 
 def valid_answers_pl(expected_pl: str) -> List[str]:
+    """Список допустимых ответов: слово + вариант без диакритик + цифры, если числительное."""
     answers = {expected_pl}
     nodiac = _strip_accents(expected_pl)
     if nodiac != expected_pl.lower():
@@ -159,9 +158,9 @@ class FeedbackStates(StatesGroup):
 class PolishTrainerBot:
 
     def __init__(self):
-        # базовые слова
+        # Базовый словарь: «зашитые» слова (на случай, если CSV нет).
         self.vocabulary: Dict[str, str] = {
-            # Powitania (смысловой порядок задаётся в categories)
+            # Powitania (порядок задаём в categories)
             "dzień dobry": "добрый день",
             "dobry wieczór": "добрый вечер",
             "cześć": "привет/пока",
@@ -227,7 +226,6 @@ class PolishTrainerBot:
             "jak się masz?": "как дела?",
             "miło mi cię poznać": "приятно познакомиться",
             "nie rozumiem": "я не понимаю",
-            "мówisz po ангielsku?": "ты говоришь по-английски?",
             "mówisz po angielsku?": "ты говоришь по-английски?",
             "ile to kosztuje?": "сколько это стоит?",
             "gdzie jest toaleta?": "где туалет?",
@@ -264,10 +262,9 @@ class PolishTrainerBot:
             "sporty siłowe": "силовые виды спорта",
         }
 
-        # категории
+        # Категории по умолчанию
         self.categories: Dict[str, List[str]] = {
-            # Podstawy
-            "powitania": [  # смысловой порядок (не сортируем)
+            "powitania": [
                 "dzień dobry", "dobry wieczór", "cześć", "do widzenia",
                 "na razie", "pa", "dziękuję", "proszę", "przepraszam", "tak",
                 "nie"
@@ -277,13 +274,13 @@ class PolishTrainerBot:
                 "różowy", "fioletowy"
             ],
             "liczby_0_10": [
-                "jeden", "dwa", "trzy", "cztery", "pięć", "sześć", "siedem",
-                "osiem", "dziewięć", "dziesięć"
+                "jeden", "dwa", "трzy", "trzy", "cztery", "pięć", "sześć",
+                "siedem", "osiem", "dziewięć", "dziesięć"
             ],
             "liczby_10_20": [
-                "jedenaście", "dwanaście", "трзynaście", "trzynaście",
-                "czternaście", "piętnaście", "szesnaście", "siedemnaście",
-                "osiemnaście", "dziewiętnaście", "dwadzieścia"
+                "jedenaście", "dwanaście", "trzynaście", "czternaście",
+                "piętnaście", "szesnaście", "siedemnaście", "osiemnaście",
+                "dziewiętnaście", "dwadzieścia"
             ],
             "liczby_20_100": [
                 "trzydzieści", "czterdzieści", "pięćdziesiąt", "sześćdziesiąt",
@@ -298,8 +295,6 @@ class PolishTrainerBot:
                 "mówisz po angielsku?", "ile to kosztuje?",
                 "gdzie jest toaleta?"
             ],
-
-            # Ubrania & Sport (свои группы)
             "ubrania": [
                 "koszulka", "koszula", "spodnie", "dżinsy", "spódnica",
                 "sukienka", "sweter", "bluza", "kurtka", "płaszcz", "buty",
@@ -310,61 +305,114 @@ class PolishTrainerBot:
                 "bieganie", "jazda na rowerze", "narciarstwo", "łyżwiarstwo",
                 "joga", "gimnastyka", "sporty siłowe"
             ],
-
-            # Остальные подтянутся из CSV при наличии:
-            # jedzenie_owoce, jedzenie_warzywa, ...; rutyna; rodzina/semya; czas_wolny; mieszkanie
         }
 
+        # Подтягиваем CSV, которые расширяют/перезаписывают словарь
         self.load_csv_vocabulary()
 
-        # сортировка внутри категорий — по алфавиту, КРОМЕ powitania (там фиксированный порядок)
+        # Сортируем категории (кроме powitania, где порядок смысловой)
         for k, lst in self.categories.items():
-            if k != "powitania":
-                # убираем дубли и сортируем
+            if k == "powitania":
+                # оставляем заданный порядок, но убираем дубли
+                seen = []
+                for w in lst:
+                    if w not in seen:
+                        seen.append(w)
+                self.categories[k] = seen
+            else:
                 self.categories[k] = sorted(list(dict.fromkeys(lst)),
                                             key=_strip_accents)
 
         self.user_scores: Dict[int, Dict] = {}
         self.quiz_sessions: Dict[int, Dict] = {}
 
+    # ── CSV ────────────────────────────────────────────────────────────────
     def load_csv_vocabulary(self):
+        """
+        Подгружаем все CSV из папки data/.
+
+        Форматы:
+        1) Новый общий файл data/slownik.csv:
+           kategoria;pl;ru
+
+        2) Старые файлы по категориям (powitania.csv, rodzina.csv...):
+           pl;ru
+           Имя файла (без .csv) = ключ категории.
+        """
         try:
-            for path in glob.glob("data/*.csv"):
-                cat_key = os.path.splitext(os.path.basename(path))[0].lower()
-                self.categories.setdefault(cat_key, [])
-                with open(path, "r", encoding="utf-8") as f:
-                    reader = csv.reader(f, delimiter=";")
-                    for row in reader:
-                        if len(row) >= 2:
+            files = glob.glob("data/*.csv")
+            if not files:
+                logger.warning(
+                    "В папке data/ нет CSV. Используются только 'зашитые' слова."
+                )
+                return
+
+            for path in files:
+                base = os.path.splitext(os.path.basename(path))[0].lower()
+
+                # 1) Новый формат — один общий словарь
+                if base == "slownik":
+                    with open(path, "r", encoding="utf-8") as f:
+                        reader = csv.reader(f, delimiter=";")
+                        header_checked = False
+                        for row in reader:
+                            if not row:
+                                continue
+                            if not header_checked:
+                                header_checked = True
+                                if row[0].strip().lower() == "kategoria":
+                                    # это заголовок
+                                    continue
+                            if len(row) < 3:
+                                continue
+                            cat = (row[0] or "").strip()
+                            pl = (row[1] or "").strip()
+                            ru = (row[2] or "").strip()
+                            if not (cat and pl and ru):
+                                continue
+                            self.vocabulary[pl] = ru
+                            self.categories.setdefault(cat, []).append(pl)
+
+                # 2) Старый формат — отдельный CSV на категорию
+                else:
+                    cat_key = base
+                    with open(path, "r", encoding="utf-8") as f:
+                        reader = csv.reader(f, delimiter=";")
+                        for row in reader:
+                            if len(row) < 2:
+                                continue
                             pl = (row[0] or "").strip()
                             ru = (row[1] or "").strip()
-                            if pl and ru:
-                                self.vocabulary[pl] = ru
-                                self.categories[cat_key].append(pl)
+                            if not (pl and ru):
+                                continue
+                            self.vocabulary[pl] = ru
+                            self.categories.setdefault(cat_key, []).append(pl)
+
             logger.info(
-                f"✅ Категорий: {len(self.categories)}; слов: {len(self.vocabulary)}"
+                f"✅ CSV загружены. Категорий: {len(self.categories)}, слов: {len(self.vocabulary)}"
             )
         except Exception as e:
             logger.error(f"Ошибка при загрузке CSV: {e}")
 
+    # ── Статы ─────────────────────────────────────────────────────────────
     def get_user_stats(self, user_id: int) -> Dict:
         if user_id not in self.user_scores:
             self.user_scores[user_id] = {
-                'total_questions': 0,
-                'correct_answers': 0,
-                'quiz_count': 0
+                "total_questions": 0,
+                "correct_answers": 0,
+                "quiz_count": 0,
             }
         return self.user_scores[user_id]
 
     def update_user_score(self, user_id: int, is_correct: bool):
         s = self.get_user_stats(user_id)
-        s['total_questions'] += 1
+        s["total_questions"] += 1
         if is_correct:
-            s['correct_answers'] += 1
+            s["correct_answers"] += 1
 
-    def flat_items(self,
-                   pool_keys: List[str] | None = None
-                   ) -> List[Tuple[str, str]]:
+    def flat_items(
+            self,
+            pool_keys: Optional[List[str]] = None) -> List[Tuple[str, str]]:
         items: List[Tuple[str, str]] = []
         if pool_keys:
             for ck in pool_keys:
@@ -373,7 +421,6 @@ class PolishTrainerBot:
                         items.append((w, self.vocabulary[w]))
         else:
             items = list(self.vocabulary.items())
-        # алфавитная сортировка по польскому
         items.sort(key=lambda x: _strip_accents(x[0]))
         return items
 
@@ -387,13 +434,24 @@ router = Router()
 # ── Группы и названия ─────────────────────────────────────────────────────────
 GROUPS = {
     "podstawy": [
-        "powitania", "kolory", "liczby_0_10", "liczby_10_20", "liczby_20_100",
-        "liczby_100_1000", "zwroty"
+        "powitania",
+        "kolory",
+        "liczby_0_10",
+        "liczby_10_20",
+        "liczby_20_100",
+        "liczby_100_1000",
+        "zwroty",
     ],
     "jedzenie": [
-        "jedzenie_owoce", "jedzenie_warzywa", "jedzenie_mieso",
-        "jedzenie_ryby", "jedzenie_nabial", "jedzenie_pieczywo",
-        "jedzenie_napoje", "jedzenie_slodycze", "jedzenie_przyprawy"
+        "jedzenie_owoce",
+        "jedzenie_warzywa",
+        "jedzenie_mieso",
+        "jedzenie_ryby",
+        "jedzenie_nabial",
+        "jedzenie_pieczywo",
+        "jedzenie_napoje",
+        "jedzenie_slodycze",
+        "jedzenie_przyprawy",
     ],
     "rutyna": ["rutyna"],
     "rodzina": ["rodzina", "semya"],
@@ -402,6 +460,7 @@ GROUPS = {
     "ubrania_group": ["ubrania"],
     "sport_group": ["sport"],
 }
+
 NAMES_PL = {
     "podstawy": "Podstawy",
     "jedzenie": "Jedzenie",
@@ -482,7 +541,8 @@ def get_groups_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text=
                 f"{icon_for_group(gkey)} {NAMES_PL.get(gkey, gkey.capitalize())}",
-                callback_data=f"learn_group:{gkey}")
+                callback_data=f"learn_group:{gkey}",
+            )
         ])
     rows.append(
         [InlineKeyboardButton(text="🔙 Wróć", callback_data="back_to_menu")])
@@ -497,8 +557,7 @@ def get_group_categories_keyboard_learn(
             rows.append([
                 InlineKeyboardButton(
                     text=f"📂 {NAMES_PL.get(ckey, ckey.capitalize())}",
-                    callback_data=
-                    f"learn_cat:{group_key}:{ckey}:0"  # сразу пагинация
+                    callback_data=f"learn_cat:{group_key}:{ckey}:0",
                 )
             ])
     rows.append(
@@ -507,13 +566,15 @@ def get_group_categories_keyboard_learn(
 
 
 def kb_learn_pagination(group_key: str, ckey: str, page: int, total: int,
-                        cats_in_group: List[str]):
+                        cats_in_group: List[str]) -> InlineKeyboardMarkup:
     prev_p = (page - 1) % total
     next_p = (page + 1) % total
+
     i = cats_in_group.index(ckey)
     prev_c = cats_in_group[i - 1] if i > 0 else cats_in_group[-1]
     next_c = cats_in_group[
         i + 1] if i < len(cats_in_group) - 1 else cats_in_group[0]
+
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -521,7 +582,7 @@ def kb_learn_pagination(group_key: str, ckey: str, page: int, total: int,
             InlineKeyboardButton(text=f"{NAMES_PL.get(ckey, ckey)}",
                                  callback_data="noop"),
             InlineKeyboardButton(
-                text="▶️", callback_data=f"learn_cat:{group_key}:{next_c}:0")
+                text="▶️", callback_data=f"learn_cat:{group_key}:{next_c}:0"),
         ],
         [
             InlineKeyboardButton(
@@ -531,7 +592,7 @@ def kb_learn_pagination(group_key: str, ckey: str, page: int, total: int,
                                  callback_data="noop"),
             InlineKeyboardButton(
                 text="⏭",
-                callback_data=f"learn_cat:{group_key}:{ckey}:{next_p}")
+                callback_data=f"learn_cat:{group_key}:{ckey}:{next_p}"),
         ],
         [
             InlineKeyboardButton(text="🔙 Wróć",
@@ -571,7 +632,8 @@ async def feedback_start(cb: CallbackQuery, state: FSMContext):
         "💬 Напиши, пожалуйста, своё сообщение.\n"
         "Это может быть отзыв, идея или пожелание.\n\n"
         "Чтобы отменить, нажми «Отмена».",
-        reply_markup=kb)
+        reply_markup=kb,
+    )
     await cb.answer()
 
 
@@ -592,32 +654,32 @@ async def feedback_receive(message: Message, state: FSMContext):
         )
         return
 
-    # отправляем подтверждение пользователю
     await message.answer("Спасибо! 💌 Сообщение отправлено Оле.",
                          reply_markup=get_main_keyboard())
     await state.clear()
 
-    # если ADMIN_ID настроен — пересылаем сообщение тебе
     if ADMIN_ID:
         user = message.from_user
         uname = f"@{user.username}" if user and user.username else "(без username)"
-        info = f"📩 Новое сообщение обратной связи\n"
-        info += f"От: {user.full_name if user else ''} {uname}\n"
-        info += f"ID: {user.id if user else '—'}\n\n"
-        info += text
+        info = ("📩 Новое сообщение обратной связи\n"
+                f"От: {user.full_name if user else ''} {uname}\n"
+                f"ID: {user.id if user else '—'}\n\n"
+                f"{text}")
         try:
             await bot.send_message(ADMIN_ID, info)
         except Exception as e:
             logger.error(f"Не удалось отправить сообщение админу: {e}")
 
 
-# ── Ucz się słówek: группы → категории (с пагинацией и стрелками) ────────────
+# ── Ucz się słówek ────────────────────────────────────────────────────────────
 @router.callback_query(F.data == "nav_learn")
 async def nav_learn(cb: CallbackQuery, state: FSMContext):
     await state.clear()
-    await cb.message.edit_text("📖 <b>Ucz się słówek</b>\n\nWybierz grupę:",
-                               reply_markup=get_groups_keyboard(),
-                               parse_mode="HTML")
+    await cb.message.edit_text(
+        "📖 <b>Ucz się słówek</b>\n\nWybierz grupę:",
+        reply_markup=get_groups_keyboard(),
+        parse_mode="HTML",
+    )
     await cb.answer()
 
 
@@ -625,9 +687,10 @@ async def nav_learn(cb: CallbackQuery, state: FSMContext):
 async def nav_learn_group(cb: CallbackQuery):
     g = cb.data.split(":", 1)[1]
     await cb.message.edit_text(
-        f"📚 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
+        f"📚 <b>{NAMES_PL.get(g, g)}</b>\nWybierz kategorię:",
         reply_markup=get_group_categories_keyboard_learn(g),
-        parse_mode="HTML")
+        parse_mode="HTML",
+    )
     await cb.answer()
 
 
@@ -639,7 +702,6 @@ async def learn_cat(cb: CallbackQuery):
     words = [
         w for w in trainer.categories.get(ckey, []) if w in trainer.vocabulary
     ]
-    # особый случай: powitania — НЕ сортируем (там задан фиксированный смысловой порядок)
     if ckey != "powitania":
         words.sort(key=_strip_accents)
 
@@ -662,15 +724,16 @@ async def learn_cat(cb: CallbackQuery):
         c for c in GROUPS.get(group_key, [])
         if c in trainer.categories and trainer.categories[c]
     ]
-    await cb.message.edit_text("\n".join(lines),
-                               reply_markup=kb_learn_pagination(
-                                   group_key, ckey, page, total,
-                                   cats_in_group),
-                               parse_mode="HTML")
+    await cb.message.edit_text(
+        "\n".join(lines),
+        reply_markup=kb_learn_pagination(group_key, ckey, page, total,
+                                         cats_in_group),
+        parse_mode="HTML",
+    )
     await cb.answer()
 
 
-# ── Тренировка: любой раздел → любая категория ────────────────────────────────
+# ── Тренировка ────────────────────────────────────────────────────────────────
 @router.callback_query(F.data == "nav_train")
 async def nav_train(cb: CallbackQuery, state: FSMContext):
     await state.clear()
@@ -701,8 +764,9 @@ def kb_train_groups() -> InlineKeyboardMarkup:
         if existing:
             rows.append([
                 InlineKeyboardButton(
-                    text=f"{icon_for_group(gkey)} {NAMES_PL.get(gkey,gkey)}",
-                    callback_data=f"train_pick_group:{gkey}")
+                    text=f"{icon_for_group(gkey)} {NAMES_PL.get(gkey, gkey)}",
+                    callback_data=f"train_pick_group:{gkey}",
+                )
             ])
     rows.append(
         [InlineKeyboardButton(text="🔙 Wróć", callback_data="nav_train")])
@@ -714,8 +778,10 @@ def kb_train_cats(group_key: str) -> InlineKeyboardMarkup:
     for ckey in GROUPS.get(group_key, []):
         if ckey in trainer.categories and trainer.categories[ckey]:
             rows.append([
-                InlineKeyboardButton(text=f"📂 {NAMES_PL.get(ckey,ckey)}",
-                                     callback_data=f"train_pick_cat:{ckey}")
+                InlineKeyboardButton(
+                    text=f"📂 {NAMES_PL.get(ckey, ckey)}",
+                    callback_data=f"train_pick_cat:{ckey}",
+                )
             ])
     rows.append([
         InlineKeyboardButton(text="🔙 Wróć", callback_data="train_scope:bycat")
@@ -745,9 +811,10 @@ async def train_scope(cb: CallbackQuery, state: FSMContext):
 async def train_pick_group(cb: CallbackQuery):
     g = cb.data.split(":", 1)[1]
     await cb.message.edit_text(
-        f"🎯 <b>{NAMES_PL.get(g,g)}</b>\nWybierz kategorię:",
+        f"🎯 <b>{NAMES_PL.get(g, g)}</b>\nWybierz kategorię:",
         reply_markup=kb_train_cats(g),
-        parse_mode="HTML")
+        parse_mode="HTML",
+    )
     await cb.answer()
 
 
@@ -778,6 +845,7 @@ async def quiz_start(cb: CallbackQuery, state: FSMContext):
     words = trainer.flat_items(pool_keys)
     if not words:
         return await cb.message.answer("❌ Brak słów w wybranym zakresie.")
+
     random.shuffle(words)
     words = words[:10]
 
@@ -786,7 +854,7 @@ async def quiz_start(cb: CallbackQuery, state: FSMContext):
         "current_question": 0,
         "score": 0,
         "total": len(words),
-        "direction": direction
+        "direction": direction,
     }
     await ask_question(cb.message, uid, state)
     await cb.answer()
@@ -918,10 +986,11 @@ async def progress(cb: CallbackQuery):
     s = trainer.get_user_stats(uid)
     if s["total_questions"]:
         acc = s["correct_answers"] / s["total_questions"] * 100
-        text = (
-            f"📊 Twoje postępy:\n\nPytania: {s['total_questions']}\n"
-            f"Poprawnych: {s['correct_answers']}\nSkuteczność: {acc:.1f}%\n"
-            f"Quizów: {s['quiz_count']}")
+        text = ("📊 Twoje postępy:\n\n"
+                f"Pytania: {s['total_questions']}\n"
+                f"Poprawnych: {s['correct_answers']}\n"
+                f"Skuteczność: {acc:.1f}%\n"
+                f"Quizów: {s['quiz_count']}")
     else:
         text = "📊 Brak statystyk. Zrób quiz!"
     await cb.message.edit_text(text, reply_markup=get_main_keyboard())

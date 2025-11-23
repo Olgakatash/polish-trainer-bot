@@ -1,0 +1,98 @@
+kategoria;pl;ru
+powitania;dzień dobry;добрый день
+powitania;dobry wieczór;добрый вечер
+powitania;cześć;привет/пока
+powitania;do widzenia;до свидания
+powitania;na razie;пока
+powitania;pa;пока
+powitania;dziękuję;спасибо
+powitania;proszę;пожалуйста
+powitania;przepraszam;извините
+powitania;tak;да
+powitania;nie;нет
+
+kolory;biały;белый
+kolory;czarny;чёрный
+kolory;czerwony;красный
+kolory;fioletowy;фиолетовый
+kolory;niebieski;синий
+kolory;różowy;розовый
+kolory;zielony;зелёный
+kolory;żółty;жёлтый
+
+liczby_0_10;jeden;один
+liczby_0_10;dwa;два
+liczby_0_10;trzy;три
+liczby_0_10;cztery;четыре
+liczby_0_10;pięć;пять
+liczby_0_10;sześć;шесть
+liczby_0_10;siedem;семь
+liczby_0_10;osiem;восемь
+liczby_0_10;dziewięć;девять
+liczby_0_10;dziesięć;десять
+
+liczby_10_20;jedenaście;одиннадцать
+liczby_10_20;dwanaście;двенадцать
+liczby_10_20;trzynaście;тринадцать
+liczby_10_20;czternaście;четырнадцать
+liczby_10_20;piętnaście;пятнадцать
+liczby_10_20;szesnaście;шестнадцать
+liczby_10_20;siedemnaście;семнадцать
+liczby_10_20;osiemnaście;восемнадцать
+liczby_10_20;dziewiętnaście;девятнадцать
+liczby_10_20;dwadzieścia;двадцать
+
+liczby_20_100;trzydzieści;тридцать
+liczby_20_100;czterdzieści;сорок
+liczby_20_100;pięćdziesiąt;пятьдесят
+liczby_20_100;sześćdziesiąt;шестьдесят
+liczby_20_100;siedemdziesiąt;семьдесят
+liczby_20_100;osiemdziesiąt;восемьдесят
+liczby_20_100;dziewięćdziesiąt;девяносто
+
+liczby_100_1000;sto;сто
+liczby_100_1000;dwieście;двести
+liczby_100_1000;trzysta;триста
+liczby_100_1000;czterysta;четыреста
+liczby_100_1000;pięćset;пятьсот
+liczby_100_1000;sześćset;шестьсот
+liczby_100_1000;siedemset;семьсот
+liczby_100_1000;osiemset;восемьсот
+liczby_100_1000;dziewięćset;девятьсот
+liczby_100_1000;tysiąc;тысяча
+
+zwroty;jak się masz?;как дела?
+zwroty;miło mi cię poznać;приятно познакомиться
+zwroty;nie rozumiem;я не понимаю
+zwroty;mówisz po angielsku?;ты говоришь по-английски?
+zwroty;ile to kosztuje?;сколько это стоит?
+zwroty;gdzie jest toaleta?;где туалет?
+
+ubrania;koszulka;футболка
+ubrania;koszula;рубашка
+ubrania;spodnie;штаны
+ubrania;dżinsy;джинсы
+ubrania;spódnica;юбка
+ubrania;sukienka;платье
+ubrania;sweter;свитер
+ubrania;bluza;толстовка
+ubrania;kurtka;куртка
+ubrania;płaszcz;пальто
+ubrania;buty;обувь
+ubrania;buty sportowe;кроссовки
+ubrania;czapka;шапка
+ubrania;szalik;шарф
+ubrania;rękawiczki;перчатки
+
+sport;piłka nożna;футбол
+sport;koszykówka;баскетбол
+sport;siatkówka;волейбол
+sport;tenis;теннис
+sport;pływanie;плавание
+sport;bieganie;бег
+sport;jazda na rowerze;езда на велосипеде
+sport;narciarstwo;лыжный спорт
+sport;łyżwiarstwo;катание на коньках
+sport;joga;йога
+sport;gimnastyka;гимнастика
+sport;sporty siłowe;силовые виды спорта
