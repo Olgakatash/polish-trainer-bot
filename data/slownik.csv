@@ -3,13 +3,16 @@ powitania;dzień dobry;добрый день
 powitania;dobry wieczór;добрый вечер
 powitania;cześć;привет/пока
 powitania;do widzenia;до свидания
+powitania;Dobranoc;спокойной ночи,до свидания
 powitania;na razie;пока
 powitania;pa;пока
-powitania;dziękuję;спасибо
-powitania;proszę;пожалуйста
-powitania;przepraszam;извините
-powitania;tak;да
-powitania;nie;нет
+
+podstawowe zwroty;dziękuję;спасибо
+podstawowe zwroty;proszę;пожалуйста
+podstawowe zwroty;przepraszam;извините
+podstawowe zwroty;nic nie szkodzi;ничего страшного
+podstawowe zwroty;tak;да
+podstawowe zwroty;nie;нет
 
 kolory;biały;белый
 kolory;czarny;чёрный
@@ -62,8 +65,11 @@ liczby_100_1000;dziewięćset;девятьсот
 liczby_100_1000;tysiąc;тысяча
 
 zwroty;jak się masz?;как дела?
+zwroty;co słychać?;как дела?
 zwroty;miło mi cię poznać;приятно познакомиться
 zwroty;nie rozumiem;я не понимаю
+zwroty;proszę powtórzyć;повтори(те), пожалуйста
+zwroty;proszę mówić wolniej;говори(те), пожалуйста, медленнее
 zwroty;mówisz po angielsku?;ты говоришь по-английски?
 zwroty;ile to kosztuje?;сколько это стоит?
 zwroty;gdzie jest toaleta?;где туалет?
@@ -96,3 +102,34 @@ sport;łyżwiarstwo;катание на коньках
 sport;joga;йога
 sport;gimnastyka;гимнастика
 sport;sporty siłowe;силовые виды спорта
+
+czasowniki;być;иметь
+czasowniki;mieć;иметь
+czasowniki;mieszkać;жить, проживать
+czasowniki;rozumieć;понимать
+czasowniki;przepraszać;извиняться
+czasowniki;czytać;читать
+czasowniki;pytać;спрашивать
+czasowniki;mówić;говорить
+czasowniki;lubić;любить
+czasowniki;robić;делать
+czasowniki;uczyć się;учиться
+czasowniki;uczyć;учить
+czasowniki;tańczyć;танцевать
+
+opis osoby;wysoki;высокий
+opis osoby;średniego wzrostu;среднего роста
+opis osoby;niski;низкий
+opis osoby;gruby;толстый
+opis osoby;szczupły;худой
+opis osoby;stary;старый
+opis osoby;w średnim wieku;среднего возраста
+opis osoby;młody;молодой
+opis osoby;chory;старый
+opis osoby;zdrowy;здоровый
+opis osoby;wysportowany;спортивный
+opis osoby;wesoły;веселый
+opis osoby;smutny;грустный
+opis osoby;przystojny;красивый
+opis osoby;ładny;красивый
+opis osoby;brzydki;страшный, некрасивый, мерзкий
