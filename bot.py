@@ -459,6 +459,9 @@ GROUPS = {
     "mieszkanie": ["mieszkanie"],
     "ubrania_group": ["ubrania"],
     "sport_group": ["sport"],
+    "podstawowe_zwroty_group": ["podstawowe zwroty"],
+    "czasowniki": ["czasowniki"],
+    "opis_osoby": ["opis osoby"],
 }
 
 NAMES_PL = {
@@ -492,6 +495,9 @@ NAMES_PL = {
     "mieszkanie": "Mieszkanie",
     "ubrania": "Ubrania",
     "sport": "Sport",
+    "podstawowe_zwroty_group": ["podstawowe zwroty"],
+    "czasowniki": ["czasowniki"],
+    "opis_osoby": ["opis osoby"],
 }
 
 
