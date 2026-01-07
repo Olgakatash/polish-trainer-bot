@@ -18,10 +18,13 @@ kolory;biały;белый
 kolory;czarny;чёрный
 kolory;czerwony;красный
 kolory;fioletowy;фиолетовый
-kolory;niebieski;синий
+kolory;niebieski;голубой
 kolory;różowy;розовый
 kolory;zielony;зелёный
 kolory;żółty;жёлтый
+kolory;szary;серый
+kolory;brązowy;коричневый
+kolory;pomarańczowy;оранжевый
 
 liczby_0_10;jeden;один
 liczby_0_10;dwa;два
@@ -84,11 +87,18 @@ ubrania;sweter;свитер
 ubrania;bluza;толстовка
 ubrania;kurtka;куртка
 ubrania;płaszcz;пальто
-ubrania;buty;обувь
+ubrania;buty;ботинки
 ubrania;buty sportowe;кроссовки
 ubrania;czapka;шапка
 ubrania;szalik;шарф
 ubrania;rękawiczki;перчатки
+ubrania;sandały;сандали
+ubrania;skarpetki;носки
+ubrania;torba;сумка
+ubrania;podkoszulek;майка
+ubrania;garnitur;костюм
+ubrania;marynarka;пиджак
+ubrania;krawat;галстук
 
 sport;piłka nożna;футбол
 sport;koszykówka;баскетбол
